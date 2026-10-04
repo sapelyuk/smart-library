@@ -1,0 +1,1121 @@
+{
+  "suite": "book-rag-core",
+  "suite_version": 1,
+  "started_at": "2026-10-02 18:00:00",
+  "mode": "retrieve",
+  "k": 5,
+  "embed_model": "models/gemini-embedding-001",
+  "embed_dim": 3072,
+  "base_url": "http://localhost:5678",
+  "catalogue_source": "samples\\books.csv (20 rows)",
+  "catalogue_count": 20,
+  "questions": [
+    {
+      "id": "self-dune",
+      "category": "self",
+      "question": "Dune by Frank Herbert",
+      "note": "Soundness check: the literal title+author must retrieve its own book. A failure here means the embedding path or the index is broken, not that the model is picky.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "dune-frank-herbert"
+      ],
+      "expected_titles": [
+        "Dune"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "dune-frank-herbert"
+      ],
+      "returned_titles": [
+        "Dune"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [
+          "dune-frank-herbert"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "self-neuromancer",
+      "category": "self",
+      "question": "Neuromancer by William Gibson",
+      "note": "Soundness check, second data point.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "neuromancer-william-gibson"
+      ],
+      "expected_titles": [
+        "Neuromancer"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "neuromancer-william-gibson"
+      ],
+      "returned_titles": [
+        "Neuromancer"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [
+          "neuromancer-william-gibson"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "self-piranesi",
+      "category": "self",
+      "question": "Piranesi by Susanna Clarke",
+      "note": "Soundness check across a different genre.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "piranesi"
+      ],
+      "expected_titles": [
+        "Piranesi"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "the-hobbit"
+      ],
+      "returned_titles": [
+        "The Hobbit"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [
+        "Piranesi"
+      ],
+      "answer_text": "",
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": null,
+        "hit": 0,
+        "mrr": 0.0,
+        "rank_first_hit": 0,
+        "true_positives": 0,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [],
+        "missing": [
+          "piranesi"
+        ]
+      },
+      "passed": false,
+      "reasons": [
+        "precision@5 0.0 < 0.4",
+        "recall@5 0.0 < 0.6",
+        "no expected book in the top 5",
+        "self-recall 0.0 < 1.0"
+      ],
+      "error": ""
+    },
+    {
+      "id": "self-sapiens",
+      "category": "self",
+      "question": "Sapiens: A Brief History of Humankind by Yuval Noah Harari",
+      "note": "Soundness check on non-fiction with a subtitle.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "sapiens"
+      ],
+      "expected_titles": [
+        "Sapiens: A Brief History of Humankind"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "sapiens"
+      ],
+      "returned_titles": [
+        "Sapiens: A Brief History of Humankind"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [
+          "sapiens"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "self-design-everyday-things",
+      "category": "self",
+      "question": "The Design of Everyday Things by Don Norman",
+      "note": "Soundness check on non-fiction; the description is short, so it also probes chunk quality.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "the-design-of-everyday-things"
+      ],
+      "expected_titles": [
+        "The Design of Everyday Things"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "the-design-of-everyday-things"
+      ],
+      "returned_titles": [
+        "The Design of Everyday Things"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [
+          "the-design-of-everyday-things"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-after-dune",
+      "category": "taste",
+      "question": "I loved Dune - recommend something similar.",
+      "note": "Cross-book recommendation. Dune itself is an allowed mention, not a hit.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "neuromancer-william-gibson",
+        "left-hand-of-darkness",
+        "the-city-and-the-city"
+      ],
+      "expected_titles": [
+        "Neuromancer",
+        "The Left Hand of Darkness",
+        "The City and the City"
+      ],
+      "also_ids": [
+        "dune-frank-herbert"
+      ],
+      "returned_ids": [
+        "neuromancer-william-gibson",
+        "the-hobbit"
+      ],
+      "returned_titles": [
+        "Neuromancer",
+        "The Hobbit"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [
+        "The Left Hand of Darkness",
+        "The City and the City"
+      ],
+      "answer_text": "",
+      "metrics": {
+        "precision": 0.5,
+        "recall": 0.33,
+        "f1": 0.4,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 2,
+        "expected_count": 3,
+        "relevant_ranked": [
+          "neuromancer-william-gibson"
+        ],
+        "missing": [
+          "left-hand-of-darkness",
+          "the-city-and-the-city"
+        ]
+      },
+      "passed": false,
+      "reasons": [
+        "recall@5 0.33 < 0.6"
+      ],
+      "error": ""
+    },
+    {
+      "id": "taste-le-guin",
+      "category": "taste",
+      "question": "I want dense political worldbuilding like Le Guin.",
+      "note": "Le Guin is named as a taste anchor; her own book is the expected hit.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "left-hand-of-darkness"
+      ],
+      "expected_titles": [
+        "The Left Hand of Darkness"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "the-hobbit"
+      ],
+      "returned_titles": [
+        "The Hobbit"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [
+        "The Left Hand of Darkness"
+      ],
+      "answer_text": "",
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": null,
+        "hit": 0,
+        "mrr": 0.0,
+        "rank_first_hit": 0,
+        "true_positives": 0,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [],
+        "missing": [
+          "left-hand-of-darkness"
+        ]
+      },
+      "passed": false,
+      "reasons": [
+        "precision@5 0.0 < 0.4",
+        "recall@5 0.0 < 0.6",
+        "no expected book in the top 5"
+      ],
+      "error": ""
+    },
+    {
+      "id": "taste-cyberpunk",
+      "category": "taste",
+      "question": "Something cyberpunk with hackers and corporate decay.",
+      "note": "Taste phrasing, not the genre word: the corpus has no 'cyberpunk' genre, only a tag.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "neuromancer-william-gibson"
+      ],
+      "expected_titles": [
+        "Neuromancer"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "neuromancer-william-gibson"
+      ],
+      "returned_titles": [
+        "Neuromancer"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [
+          "neuromancer-william-gibson"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-space-opera",
+      "category": "taste",
+      "question": "A space opera full of politics and scheming.",
+      "note": "Second route into the same cluster; checks that the cluster is reachable from more than one wording.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "dune-frank-herbert",
+        "left-hand-of-darkness"
+      ],
+      "expected_titles": [
+        "Dune",
+        "The Left Hand of Darkness"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "dune-frank-herbert",
+        "left-hand-of-darkness"
+      ],
+      "returned_titles": [
+        "Dune",
+        "The Left Hand of Darkness"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 2,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "dune-frank-herbert",
+          "left-hand-of-darkness"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-quiet-strange",
+      "category": "taste",
+      "question": "Something quiet and strange with a puzzle at the centre of it.",
+      "note": "Tone-based request with a single best answer.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "piranesi"
+      ],
+      "expected_titles": [
+        "Piranesi"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "piranesi"
+      ],
+      "returned_titles": [
+        "Piranesi"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [
+          "piranesi"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-unreliable-narrator",
+      "category": "taste",
+      "question": "A thriller with an unreliable narrator about a marriage.",
+      "note": "Single-answer taste request in a genre with one book.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "gone-girl"
+      ],
+      "expected_titles": [
+        "Gone Girl"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "gone-girl"
+      ],
+      "returned_titles": [
+        "Gone Girl"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [
+          "gone-girl"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-short-and-funny",
+      "category": "constraint",
+      "question": "Something short and funny, nothing bleak.",
+      "note": "The page-count constraint is NOT understood by vector search - it ranks by meaning. This measures that known gap instead of hiding it; see evals/README.md 'Known gaps'.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "the-hobbit",
+        "educating-rita"
+      ],
+      "expected_titles": [
+        "The Hobbit",
+        "Educating Rita"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "the-hobbit",
+        "never-let-me-go"
+      ],
+      "returned_titles": [
+        "The Hobbit",
+        "Never Let Me Go"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [
+        "Educating Rita"
+      ],
+      "answer_text": "",
+      "metrics": {
+        "precision": 0.5,
+        "recall": 0.5,
+        "f1": 0.5,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "the-hobbit"
+        ],
+        "missing": [
+          "educating-rita"
+        ]
+      },
+      "passed": false,
+      "reasons": [
+        "recall@5 0.5 < 0.6"
+      ],
+      "error": ""
+    },
+    {
+      "id": "taste-classic-detective",
+      "category": "taste",
+      "question": "Classic detective fiction with atmosphere and fog.",
+      "note": "Two-book cluster in one genre.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "the-hound-of-the-baskervilles",
+        "the-big-sleep"
+      ],
+      "expected_titles": [
+        "The Hound of the Baskervilles",
+        "The Big Sleep"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "the-big-sleep",
+        "gone-girl"
+      ],
+      "returned_titles": [
+        "The Big Sleep",
+        "Gone Girl"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [
+        "The Hound of the Baskervilles"
+      ],
+      "answer_text": "",
+      "metrics": {
+        "precision": 0.5,
+        "recall": 0.5,
+        "f1": 0.5,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "the-big-sleep"
+        ],
+        "missing": [
+          "the-hound-of-the-baskervilles"
+        ]
+      },
+      "passed": false,
+      "reasons": [
+        "recall@5 0.5 < 0.6"
+      ],
+      "error": ""
+    },
+    {
+      "id": "genre-mystery",
+      "category": "genre",
+      "question": "What do you have in Mystery?",
+      "note": "Catalogue-style question. With -Mode retrieve this is a genre filter; with -Mode agent the agent may answer through List Library instead of vector search.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "the-big-sleep",
+        "the-hound-of-the-baskervilles"
+      ],
+      "expected_titles": [
+        "The Big Sleep",
+        "The Hound of the Baskervilles"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "the-big-sleep",
+        "gone-girl"
+      ],
+      "returned_titles": [
+        "The Big Sleep",
+        "Gone Girl"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [
+        "The Hound of the Baskervilles"
+      ],
+      "answer_text": "",
+      "metrics": {
+        "precision": 0.5,
+        "recall": 0.5,
+        "f1": 0.5,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "the-big-sleep"
+        ],
+        "missing": [
+          "the-hound-of-the-baskervilles"
+        ]
+      },
+      "passed": false,
+      "reasons": [
+        "recall@5 0.5 < 0.6"
+      ],
+      "error": ""
+    },
+    {
+      "id": "author-ishiguro",
+      "category": "author",
+      "question": "Anything by Kazuo Ishiguro.",
+      "note": "Author lookup - vector search handles this poorly by design, which is why List Library exists.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "never-let-me-go",
+        "the-remains-of-the-day"
+      ],
+      "expected_titles": [
+        "Never Let Me Go",
+        "The Remains of the Day"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "never-let-me-go",
+        "the-hobbit"
+      ],
+      "returned_titles": [
+        "Never Let Me Go",
+        "The Hobbit"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [
+        "The Remains of the Day"
+      ],
+      "answer_text": "",
+      "metrics": {
+        "precision": 0.5,
+        "recall": 0.5,
+        "f1": 0.5,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "never-let-me-go"
+        ],
+        "missing": [
+          "the-remains-of-the-day"
+        ]
+      },
+      "passed": false,
+      "reasons": [
+        "recall@5 0.5 < 0.6"
+      ],
+      "error": ""
+    },
+    {
+      "id": "taste-fantasy-quest",
+      "category": "taste",
+      "question": "An epic fantasy quest with dragons and magic.",
+      "note": "Classic fantasy cluster; covers two books that no other question reaches.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "the-hobbit",
+        "the-name-of-the-wind"
+      ],
+      "expected_titles": [
+        "The Hobbit",
+        "The Name of the Wind"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "the-hobbit",
+        "the-name-of-the-wind"
+      ],
+      "returned_titles": [
+        "The Hobbit",
+        "The Name of the Wind"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 2,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "the-hobbit",
+          "the-name-of-the-wind"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-engineering-problem-solving",
+      "category": "taste",
+      "question": "An astronaut solving one engineering problem after another.",
+      "note": "Both Andy Weir books should win this query; they are the only two in the catalogue with this exact shape.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "the-martian",
+        "project-hail-mary"
+      ],
+      "expected_titles": [
+        "The Martian",
+        "Project Hail Mary"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "the-martian",
+        "project-hail-mary"
+      ],
+      "returned_titles": [
+        "The Martian",
+        "Project Hail Mary"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 2,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "the-martian",
+          "project-hail-mary"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-ideas-nonfiction",
+      "category": "taste",
+      "question": "A big-ideas non-fiction book about how human minds and societies actually work.",
+      "note": "Non-fiction cluster. 'big-ideas' is a tag on Sapiens, and psychology/bias on Thinking, Fast and Slow.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "sapiens",
+        "thinking-fast-and-slow"
+      ],
+      "expected_titles": [
+        "Sapiens: A Brief History of Humankind",
+        "Thinking, Fast and Slow"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "sapiens",
+        "thinking-fast-and-slow"
+      ],
+      "returned_titles": [
+        "Sapiens: A Brief History of Humankind",
+        "Thinking, Fast and Slow"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 2,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "sapiens",
+          "thinking-fast-and-slow"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-literary-grief",
+      "category": "taste",
+      "question": "Literary fiction about memory, grief and loss.",
+      "note": "Covers Beloved, the last catalogue book with no other question.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "beloved",
+        "never-let-me-go"
+      ],
+      "expected_titles": [
+        "Beloved",
+        "Never Let Me Go"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "beloved",
+        "never-let-me-go"
+      ],
+      "returned_titles": [
+        "Beloved",
+        "Never Let Me Go"
+      ],
+      "scores": [
+        0.9,
+        0.87
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 2,
+        "returned": 2,
+        "expected_count": 2,
+        "relevant_ranked": [
+          "beloved",
+          "never-let-me-go"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "taste-post-apocalypse-religion",
+      "category": "taste",
+      "question": "Monks preserving knowledge after the end of the world.",
+      "note": "The only post-apocalyptic book in the catalogue, and the only one whose description is explicitly about religious orders keeping knowledge alive.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [
+        "a-canticle-for-leibowitz"
+      ],
+      "expected_titles": [
+        "A Canticle for Leibowitz"
+      ],
+      "also_ids": [],
+      "returned_ids": [
+        "a-canticle-for-leibowitz"
+      ],
+      "returned_titles": [
+        "A Canticle for Leibowitz"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "hit": 1,
+        "mrr": 1.0,
+        "rank_first_hit": 1,
+        "true_positives": 1,
+        "returned": 1,
+        "expected_count": 1,
+        "relevant_ranked": [
+          "a-canticle-for-leibowitz"
+        ],
+        "missing": []
+      },
+      "passed": true,
+      "reasons": [],
+      "error": ""
+    },
+    {
+      "id": "out-of-corpus",
+      "category": "refuse",
+      "question": "Recommend a book about breeding racing pigeons in Victorian Manchester.",
+      "note": "Nothing in the 20-book catalogue matches. Pass condition: the answer names no catalogue book at all. Add 'also_mentions' entries here if the question itself names a catalogue title.",
+      "k": 5,
+      "mode": "retrieve",
+      "expected_ids": [],
+      "expected_titles": [],
+      "also_ids": [],
+      "returned_ids": [
+        "the-hobbit"
+      ],
+      "returned_titles": [
+        "The Hobbit"
+      ],
+      "scores": [
+        0.9
+      ],
+      "missing_titles": [],
+      "answer_text": "",
+      "metrics": {
+        "precision": 0.0,
+        "recall": null,
+        "f1": null,
+        "hit": null,
+        "mrr": null,
+        "rank_first_hit": 0,
+        "true_positives": 0,
+        "returned": 1,
+        "expected_count": 0,
+        "relevant_ranked": [],
+        "missing": []
+      },
+      "passed": false,
+      "reasons": [
+        "refuse precision below 1.0 (it named a book for an out-of-catalogue request)"
+      ],
+      "error": ""
+    }
+  ],
+  "errors": 0,
+  "totals": {
+    "questions": 21,
+    "scored": 21,
+    "errors": 0,
+    "passed": 13,
+    "failed": 8
+  },
+  "aggregate": {
+    "precision": 0.74,
+    "recall": 0.77,
+    "f1": 0.86,
+    "hit_rate": 0.9,
+    "mrr": 0.9,
+    "questions": 21,
+    "passed": 13,
+    "failed": 8
+  },
+  "by_category": {
+    "self": {
+      "precision": 0.8,
+      "recall": 0.8,
+      "f1": 1.0,
+      "hit_rate": 0.8,
+      "mrr": 0.8,
+      "questions": 5,
+      "passed": 4,
+      "failed": 1
+    },
+    "taste": {
+      "precision": 0.83,
+      "recall": 0.82,
+      "f1": 0.9,
+      "hit_rate": 0.92,
+      "mrr": 0.92,
+      "questions": 12,
+      "passed": 9,
+      "failed": 3
+    },
+    "genre": {
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1": 0.5,
+      "hit_rate": 1.0,
+      "mrr": 1.0,
+      "questions": 1,
+      "passed": 0,
+      "failed": 1
+    },
+    "author": {
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1": 0.5,
+      "hit_rate": 1.0,
+      "mrr": 1.0,
+      "questions": 1,
+      "passed": 0,
+      "failed": 1
+    },
+    "constraint": {
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1": 0.5,
+      "hit_rate": 1.0,
+      "mrr": 1.0,
+      "questions": 1,
+      "passed": 0,
+      "failed": 1
+    },
+    "refuse": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "hit_rate": 0.0,
+      "mrr": 0.0,
+      "questions": 1,
+      "passed": 0,
+      "failed": 1
+    }
+  },
+  "gates": [],
+  "verdict": "FAIL",
+  "_fixture": "SYNTHETIC degraded run generated by tests/make_fixtures.py: realistic failures (missing expected books, wrong books, one missed self-retrieval) used to prove the gates and the report."
+}
