@@ -7,6 +7,11 @@
 *.sql.gz
 dumps/
 
+# Generated eval reports. The suite and the fixtures ARE committed; a run is an
+# artifact of this machine (it embeds machine timings and API answers), so it is not.
+evals/results/
+!evals/results/.gitkeep
+
 # Editor / OS noise
 .vscode/
 .idea/

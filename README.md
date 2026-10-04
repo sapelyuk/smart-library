@@ -59,8 +59,11 @@ Smart Library AI является **первоклассным компонен�
      20 книг, обе точки входа (chat UI и webhook) прошли smoke-тест.
    - **Промпты** в прототипе хранятся внутри n8n workflow; вынос в
      версионируемые файлы (`services/ai-service/prompts/`) — направление развития.
-   - **Оценка качества** (`services/ai-service/eval/`) — тестовые сценарии, метрики
-     релевантности, регрессия при обновлении модели — в плане.
+    - **Оценка качества** (`services/ai-service/rag/evals/`) — набор из 21
+      тестового вопроса (taste/self/author/genre/constraint/refuse) с ожидаемыми
+      книгами; скрипт `scripts/eval-rag.ps1` (метрики precision@k, recall@k,
+      hit@k, MRR; пороги; отчёты); 53 offline-теста (`tests/`). Прогон:
+      `powershell -File scripts/eval-rag.ps1 -ValidateOnly` (бесплатно, без сети).
 
    **Как устроен RAG-конвейер (работающий прототип):**
 
@@ -102,7 +105,7 @@ Smart Library AI является **первоклассным компонен�
 | CI (GitHub Actions: build + test)                     | готово (PR #28)                                        |
 | Контейнеризация (Dockerfile + compose для сервисов)   | не начато (issue #6)                                   |
 | Брокер сообщений: выбор и локальная инфраструктура    | готово: ADR-0001 (RabbitMQ), `docker-compose.yml`; реализация — #14 |
-| AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` |
+| AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста; артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | не начато (issue #23); архитектура — ADR-0002          |
 
 Локальный запуск Book Service:

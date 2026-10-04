@@ -1,0 +1,165 @@
+{
+  "_comment": "Book RAG evaluation suite. Consumed by scripts/eval-rag.ps1 (runs the suite) and scripts/eval_metrics.py (re-scores a saved results file). Schema and rules: evals/README.md. Expected ids MUST be book_ids that exist in samples/books.csv; -ValidateOnly proves that offline.",
+  "suite": "book-rag-core",
+  "version": 1,
+  "description": "Core retrieval-quality suite over the 20-book sample catalogue.",
+  "defaults": {
+    "k": 5,
+    "category": "taste"
+  },
+  "questions": [
+    {
+      "id": "self-dune",
+      "category": "self",
+      "question": "Dune by Frank Herbert",
+      "expected": ["dune-frank-herbert"],
+      "also_mentions": [],
+      "note": "Soundness check: the literal title+author must retrieve its own book. A failure here means the embedding path or the index is broken, not that the model is picky."
+    },
+    {
+      "id": "self-neuromancer",
+      "category": "self",
+      "question": "Neuromancer by William Gibson",
+      "expected": ["neuromancer-william-gibson"],
+      "note": "Soundness check, second data point."
+    },
+    {
+      "id": "self-piranesi",
+      "category": "self",
+      "question": "Piranesi by Susanna Clarke",
+      "expected": ["piranesi"],
+      "note": "Soundness check across a different genre."
+    },
+    {
+      "id": "self-sapiens",
+      "category": "self",
+      "question": "Sapiens: A Brief History of Humankind by Yuval Noah Harari",
+      "expected": ["sapiens"],
+      "note": "Soundness check on non-fiction with a subtitle."
+    },
+    {
+      "id": "self-design-everyday-things",
+      "category": "self",
+      "question": "The Design of Everyday Things by Don Norman",
+      "expected": ["the-design-of-everyday-things"],
+      "note": "Soundness check on non-fiction; the description is short, so it also probes chunk quality."
+    },
+    {
+      "id": "taste-after-dune",
+      "category": "taste",
+      "question": "I loved Dune - recommend something similar.",
+      "expected": ["neuromancer-william-gibson", "left-hand-of-darkness", "the-city-and-the-city"],
+      "also_mentions": ["dune-frank-herbert"],
+      "note": "Cross-book recommendation. Dune itself is an allowed mention, not a hit."
+    },
+    {
+      "id": "taste-le-guin",
+      "category": "taste",
+      "question": "I want dense political worldbuilding like Le Guin.",
+      "expected": ["left-hand-of-darkness"],
+      "also_mentions": [],
+      "note": "Le Guin is named as a taste anchor; her own book is the expected hit."
+    },
+    {
+      "id": "taste-cyberpunk",
+      "category": "taste",
+      "question": "Something cyberpunk with hackers and corporate decay.",
+      "expected": ["neuromancer-william-gibson"],
+      "note": "Taste phrasing, not the genre word: the corpus has no 'cyberpunk' genre, only a tag."
+    },
+    {
+      "id": "taste-space-opera",
+      "category": "taste",
+      "question": "A space opera full of politics and scheming.",
+      "expected": ["dune-frank-herbert", "left-hand-of-darkness"],
+      "also_mentions": [],
+      "note": "Second route into the same cluster; checks that the cluster is reachable from more than one wording."
+    },
+    {
+      "id": "taste-quiet-strange",
+      "category": "taste",
+      "question": "Something quiet and strange with a puzzle at the centre of it.",
+      "expected": ["piranesi"],
+      "note": "Tone-based request with a single best answer."
+    },
+    {
+      "id": "taste-unreliable-narrator",
+      "category": "taste",
+      "question": "A thriller with an unreliable narrator about a marriage.",
+      "expected": ["gone-girl"],
+      "note": "Single-answer taste request in a genre with one book."
+    },
+    {
+      "id": "taste-short-and-funny",
+      "category": "constraint",
+      "question": "Something short and funny, nothing bleak.",
+      "expected": ["the-hobbit", "educating-rita"],
+      "note": "The page-count constraint is NOT understood by vector search - it ranks by meaning. This measures that known gap instead of hiding it; see evals/README.md 'Known gaps'."
+    },
+    {
+      "id": "taste-classic-detective",
+      "category": "taste",
+      "question": "Classic detective fiction with atmosphere and fog.",
+      "expected": ["the-hound-of-the-baskervilles", "the-big-sleep"],
+      "note": "Two-book cluster in one genre."
+    },
+    {
+      "id": "genre-mystery",
+      "category": "genre",
+      "question": "What do you have in Mystery?",
+      "expected": ["the-big-sleep", "the-hound-of-the-baskervilles"],
+      "note": "Catalogue-style question. With -Mode retrieve this is a genre filter; with -Mode agent the agent may answer through List Library instead of vector search."
+    },
+    {
+      "id": "author-ishiguro",
+      "category": "author",
+      "question": "Anything by Kazuo Ishiguro.",
+      "expected": ["never-let-me-go", "the-remains-of-the-day"],
+      "note": "Author lookup - vector search handles this poorly by design, which is why List Library exists."
+    },
+    {
+      "id": "taste-fantasy-quest",
+      "category": "taste",
+      "question": "An epic fantasy quest with dragons and magic.",
+      "expected": ["the-hobbit", "the-name-of-the-wind"],
+      "note": "Classic fantasy cluster; covers two books that no other question reaches."
+    },
+    {
+      "id": "taste-engineering-problem-solving",
+      "category": "taste",
+      "question": "An astronaut solving one engineering problem after another.",
+      "expected": ["the-martian", "project-hail-mary"],
+      "also_mentions": [],
+      "note": "Both Andy Weir books should win this query; they are the only two in the catalogue with this exact shape."
+    },
+    {
+      "id": "taste-ideas-nonfiction",
+      "category": "taste",
+      "question": "A big-ideas non-fiction book about how human minds and societies actually work.",
+      "expected": ["sapiens", "thinking-fast-and-slow"],
+      "note": "Non-fiction cluster. 'big-ideas' is a tag on Sapiens, and psychology/bias on Thinking, Fast and Slow."
+    },
+    {
+      "id": "taste-literary-grief",
+      "category": "taste",
+      "question": "Literary fiction about memory, grief and loss.",
+      "expected": ["beloved", "never-let-me-go"],
+      "also_mentions": [],
+      "note": "Covers Beloved, the last catalogue book with no other question."
+    },
+    {
+      "id": "taste-post-apocalypse-religion",
+      "category": "taste",
+      "question": "Monks preserving knowledge after the end of the world.",
+      "expected": ["a-canticle-for-leibowitz"],
+      "note": "The only post-apocalyptic book in the catalogue, and the only one whose description is explicitly about religious orders keeping knowledge alive."
+    },
+    {
+      "id": "out-of-corpus",
+      "category": "refuse",
+      "question": "Recommend a book about breeding racing pigeons in Victorian Manchester.",
+      "expected": [],
+      "note": "Nothing in the 20-book catalogue matches. Pass condition: the answer names no catalogue book at all. Add 'also_mentions' entries here if the question itself names a catalogue title."
+    }
+  ]
+}
