@@ -19,9 +19,10 @@
 
 > **Статус: работает от начала до конца.** База данных проверена, созданы 3 учётных данных (credential),
 > workflow активен, **проиндексировано 20 книг**, и агент отвечает рекомендациями, основанными на реальных
-> строках каталога (обе точки входа прошли дымовой тест (smoke test)). Практическим ограничением теперь
-> является **квота бесплатного тарифа Gemini**, которую чат и эмбеддинги делят между собой — см.
-> [docs/PROGRESS.md](docs/PROGRESS.md) Сессия 4b для доказательств и запасного варианта с Groq.
+> строках каталога (обе точки входа прошли дымовой тест (smoke test)). **Добавлено, но не делалось:** набор
+> из 30 оценочных вопросов `evals/rag-eval-suite.json` и скрипт `scripts\eval-rag.ps1` — запустите их,
+> прежде чем утверждать, что качество поиска улучшилось. См. [docs/PROGRESS.md](docs/PROGRESS.md) Сессия 4b
+> для доказательств и запасного варианта с Groq.
 
 ## Карта документации
 
@@ -107,6 +108,16 @@ n8n-rag-system/
     ingest-catalogue.ps1       bulk-load a catalogue via the ingest webhook (idempotent)
     import-workflow.ps1        n8n CLI import helper (USE -Update to re-import)
     validate_workflow.py       structural checks on the workflow JSON - run after every edit
+    eval-rag.ps1               quality gates: runs the eval suite, reports precision@k / recall@k / hit@k / MRR
+    eval_metrics.py            re-scores a saved run, audits the suite - offline, no API key
+  evals/
+    README.md                  what the metrics mean and how to add a question
+    rag-eval-suite.json        the eval set: 30 questions -> expected books
+    fixtures/                  synthetic runs used by the offline tests
+    results/                   generated reports (git-ignored)
+  tests/
+    test_eval_metrics.py       53 offline tests for the metric + matching rules
+    _make_fixtures.py          regenerates evals/fixtures/
   docs/
     RULES.md  ARCHITECTURE.md  DECISIONS.md  PROGRESS.md  SETUP.md  USAGE.md
 ```

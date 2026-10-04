@@ -91,17 +91,23 @@ smart-library/
     │   └── migrations/          # 001_init.sql (users, sessions) + migrations.go (embed FS)
     └── ai-service/              # ADR-0002; RAG-прототип работает, см. services/ai-service/README.md
         ├── README.md            # статус, плановый контракт ai.v1.AiService
-        └── rag/                 # рабочий прототип RAG (n8n workflow, pgvector схема, скрипты)
+        └── rag/                 # рабочий прототип RAG (n8n workflow, pgvector схема, скрипты, eval-набор)
             ├── README.md        # назначение, быстрый старт, env-переменные
             ├── docker-compose.yml  # отдельный pgvector-стек для работы с прототипом
             ├── db/              # 01-schema.sql (расширение, таблицы, функции), smoke-test, assertions
             ├── workflow/        # экспорт n8n workflow (book-rag-system.json)
-            ├── scripts/         # start/verify/import/ingest скрипты (PowerShell + python)
+            ├── scripts/         # start/verify/import/ingest/eval скрипты (PowerShell + python)
+            │   └── eval-rag.ps1  # прогон eval-набора: retrieve|agent, метрики, отчёт в evals/reports/
+            ├── evals/           # **eval-набор** (контракт того, что считать хорошим ответом)
+            │   ├── rag-eval-suite.json  # 21 вопрос: taste/self/author/genre/constraint/refuse, ожидаемые id
+            │   └── reports/     # отчёты прогонов (JSON + Markdown), .gitignore кроме README
+            ├── tests/           # pytest-набор метрик eval-набора (hit-rate, MRR, precision@k, refuse-скор)
+            ├── pytest.ini       # python -m pytest tests
             ├── samples/books.csv  # 20 книг для индексации
             └── docs/            # документация прототипа (ARCHITECTURE/SETUP/USAGE)
 ```
 
-`loan-service`, `notification-service` и `api-gateway` на диске **отсутствуют** — это следующая работа. Go-модуль `services/ai-service` ещё не создан (задача #23), но в `rag/` лежит **рабочий** RAG-прототип (без Go-кода): pgvector, схема, n8n workflow, проиндексировано 20 книг.
+`loan-service`, `notification-service` и `api-gateway` на диске **отсутствуют** — это следующая работа. Go-модуль `services/ai-service` ещё не создан (задача #23), но в `rag/` лежит **рабочий** RAG-прототип (без Go-кода): pgvector, схема, n8n workflow, проиндексировано 20 книг, плюс **eval-набор** (`evals/` + `scripts/eval-rag.ps1` + `tests/`) — офлайн-валидация: `powershell -File scripts/eval-rag.ps1 -ValidateOnly`.
 
 ## Статус реализации
 
@@ -123,7 +129,7 @@ smart-library/
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28) |
 | Контейнеризация | готово: multi-stage Dockerfile для book- и user-service, сервисы и `book-db` в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6) |
 | Событийная шина: выбор брокера | ADR-0001 (RabbitMQ), локальный RabbitMQ в `docker-compose.yml`; реализация — issue #14 |
-| AI Service: RAG-прототип | **работает end-to-end**: n8n + pgvector + Gemini, 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` (#22) |
+| AI Service: RAG-прототип | **работает end-to-end**: n8n + pgvector + Gemini, 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` (#22). Оценка качества: `eval/` (30-вопросовый набор) + `scripts/run_eval.py` + `tests/` (pytest), метрики precision@k/recall@k/hit@k/refusal-accuracy, офлайн-прогон без сети/API-ключей |
 | AI Service: Go-адаптер `ai.v1.AiService` | не начато (issue #23); архитектура — ADR-0002; pgvector в `docker-compose.yml` (`ai-rag-db`, `:5433`) |
 
 ## Ключевые файлы
@@ -145,7 +151,7 @@ smart-library/
 - `user-service/migrations/` — `001_init.sql` в goose-формате + `migrations.go` с `//go:embed`; применяется `pkg/migrate` при старте.
 - `docs/adr/0001-message-broker.md` — решение по брокеру (RabbitMQ), сравнение с Kafka/NATS по критериям issue #7, модель событий: topic exchange `library.events`, routing key = `<aggregate>.<action>`, конверт `{event_id, event_type, occurred_at, payload}`, publisher confirms + ручной ack, отложенная доставка через `x-message-ttl` + `x-dead-letter-exchange`. Реализация — issue #14.
 - `docs/adr/0002-ai-recommendation-architecture.md` — решение по AI-модулю (принято): `ai-service` — тонкий Go-адаптер с контрактом `ai.v1.AiService` (Recommend, IngestBook), n8n RAG остаётся внутренней реализацией, каталог синхронизируется событиями `book.*` (источник истины — Book Service). Вариант C (нативный Go-порт RAG) — задокументированное направление развития. Задачи: #22 (перенос артефактов, готово), #23 (реализация Go-адаптера).
-- `services/ai-service/rag/` — **работающий** прототип RAG: `db/01-schema.sql` (pgvector: `books`, `book_chunks` как `halfvec(3072)`, HNSW-индекс, функции `match_book_chunks`/`get_book`/`list_books`/`delete_book`), `workflow/book-rag-system.json` (n8n, agentic RAG с 4 инструментами), `scripts/` (start/verify/ingest), `samples/books.csv` (20 книг), `docs/` (ARCHITECTURE/SETUP/USAGE). Эмбеддинги — Gemini `models/gemini-embedding-001` (3072 dims), chat-модель изолирована в одном узле. Секреты — только в `.env` (git-ignored), шаблон `.env.example`.
+- `services/ai-service/rag/` — **работающий** прототип RAG: `db/01-schema.sql` (pgvector: `books`, `book_chunks` как `halfvec(3072)`, HNSW-индекс, функции `match_book_chunks`/`get_book`/`list_books`/`delete_book`), `workflow/book-rag-system.json` (n8n, agentic RAG с 4 инструментами), `scripts/` (start/verify/ingest/eval), `samples/books.csv` (20 книг), `docs/` (ARCHITECTURE/SETUP/USAGE), `evals/` (30-вопросовый набор: taste/self/author/genre/constraint/refuse), `tests/` (pytest: precision@k/recall@k/hit@k/refusal-accuracy). Эмбеддинги — Gemini `models/gemini-embedding-001` (3072 dims), chat-модель изолирована в одном узле. Секреты — только в `.env` (git-ignored), шаблон `.env.example`.
 - `docker-compose.yml` — сервисы + инфраструктура. RabbitMQ (`rabbitmq:4-management`): AMQP `:5672`, management UI `:15672`, healthcheck `rabbitmq-diagnostics -q ping`, volume `rabbitmq-data`; логин/пароль — из `RABBITMQ_USER`/`RABBITMQ_PASS` (по умолчанию `guest`). PostgreSQL для user-service (`postgres:17`, контейнер `library-user-db`, хост-порт `:5432`, volume `user-db-data`): миграции применяются через `pkg/migrate` при старте. PostgreSQL для book-service (`postgres:17`, контейнер `library-book-db`, хост-порт `:5434`, volume `book-db-data`) — подготовлен заранее, сервис ещё на in-memory. pgvector (`pgvector/pgvector:pg17`, контейнер `library-ai-rag-db`, хост-порт `:5433`, volume `ai-rag-db-data`): init-скрипты монтируются из `services/ai-service/rag/db/`, учётные данные — из `AI_RAG_DB_USER`/`AI_RAG_DB_PASSWORD`/`AI_RAG_DB_NAME` (по умолчанию `bookrag`). Сервисные контейнеры `library-book-service`/`library-user-service` собираются из Dockerfile'ов (контекст — корень репо), публикуют gRPC/REST-порты и проходят healthcheck на `GET /healthz`; `user-service` ждёт `user-db` по `condition: service_healthy`.
 - `services/*/Dockerfile` — multi-stage: `golang:1.27-alpine` (build, `GOWORK=off`, `CGO_ENABLED=0`) → `alpine:3.21` (runtime, non-root uid 10001/10002, `wget` для healthcheck). Контекст сборки — **корень репозитория**, т.к. `go.mod` сервисов содержит `replace ... => ../../pkg`; `.dockerignore` исключает `.git`, `go.work`, артефакты. Точка входа — `./cmd/server`.
 
@@ -194,6 +200,8 @@ smart-library/
 **Тестирование.** Используется стандартный `testing` (без testify). Unit-тесты живут рядом с кодом (`*_test.go`, пакет `*_test`). В `book-service` тесты сервиса и репозитория гоняются поверх in-memory `Store`, HTTP-слой проверяется через `httptest` (`internal/handler/http_test.go`). В `user-service` покрыты домен, security (PR #11) и HTTP-слой (PR #26). TODO: тесты репозитория против PostgreSQL (тестовые контейнеры), интеграционный тест gRPC-handler'а через `bufconn`, моки для gRPC-клиентов.
 
 **Конфигурация.** Переменные окружения, читаются через `pkg/config` (значения по умолчанию задаются в `cmd/server/main.go`). Префикс Book Service — `BOOK_SERVICE_*` (см. таблицу в `book-service/README.md`).
+
+**Актуализация главного README.md (обязательная).** Корневой `README.md` — архитектурная спецификация проекта и источник истины для внешних читателей. При выполнении **любой** задачи, затрагивающей состояние системы (новая фича, исправление, перенос артефактов, изменение инфраструктуры), **всегда** проверяй и при необходимости обновляй секции главного README.md, описывающие затронутый компонент. Устаревшее описание хуже, чем отсутствие описания: вводит в заблуждение.
 
 **Git-процесс (обязательный).** Работа ведётся только через ветки и pull request'ы в `main`:
 
