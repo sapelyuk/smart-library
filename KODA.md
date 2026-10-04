@@ -117,19 +117,20 @@ smart-library/
 | Book Service: контракт, домен, сервис, handler, запуск | готов, собирается и работает |
 | REST-слой и Swagger Book Service | готов: grpc-gateway на `:8091`, Swagger UI на `/swagger/` |
 | Хранилище Book Service | только in-memory (`internal/repository/memory`), данные живут до рестарта |
-| PostgreSQL-реализация репозитория Book Service | нет; миграция `001_init.sql` написана заранее |
+| PostgreSQL-реализация репозитория Book Service | **в работе** (issue #9, PG 17 + `pgx/v5`); миграция `001_init.sql` написана заранее |
 | Тесты Book Service | домен, сервис, in-memory репозиторий, HTTP-слой — готово (PR #27) |
 | User Service: контракт, домен, security, сервис, handler, запуск | готов, собирается и работает |
 | REST-слой и Swagger User Service | готов: grpc-gateway на `:8092`, Swagger UI на `/swagger/` |
 | Аутентификация и RBAC | готово: argon2id-пароли, bearer-токены (в БД только SHA-256-хеш), сессии с TTL, роли READER/LIBRARIAN, интерцептор + проверки в домене |
 | Хранилище User Service | PostgreSQL 17 в Docker (`database/sql` + `lib/pq`), миграции при старте |
 | Тесты User Service | домен, security (PR #11) и HTTP-слой (PR #26) — готово; сервис и репозиторий — нет |
-| Loan / Notification Service, API Gateway | нет (issues #9, #10) |
+| API Gateway | нет (issue #10) |
+| Loan Service, Notification Service | нет, задачи не заведены |
 | gRPC-клиенты между сервисами, события, discovery | нет; брокер выбран — **RabbitMQ** (issue #7), discovery — issue #8 (`AuthenticateToken` User Service — подготовленная точка входа для gateway) |
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28) |
 | Контейнеризация | готово: multi-stage Dockerfile для book- и user-service, сервисы и `book-db` в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6) |
 | Событийная шина: выбор брокера | ADR-0001 (RabbitMQ), локальный RabbitMQ в `docker-compose.yml`; реализация — issue #14 |
-| AI Service: RAG-прототип | **работает end-to-end**: n8n + pgvector + Gemini, 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` (#22). Оценка качества: `eval/` (30-вопросовый набор) + `scripts/run_eval.py` + `tests/` (pytest), метрики precision@k/recall@k/hit@k/refusal-accuracy, офлайн-прогон без сети/API-ключей |
+| AI Service: RAG-прототип | **работает end-to-end**: n8n + pgvector + Gemini, 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` (#22). Оценка качества: `evals/rag-eval-suite.json` (21 вопрос: taste/self/author/genre/constraint/refuse) + `scripts/eval-rag.ps1` + `scripts/eval_metrics.py` + `tests/` (53 offline-теста, pytest), метрики precision@k/recall@k/hit@k/MRR, офлайн-валидация набора без сети и API-ключей (`-ValidateOnly`) |
 | AI Service: Go-адаптер `ai.v1.AiService` | не начато (issue #23); архитектура — ADR-0002; pgvector в `docker-compose.yml` (`ai-rag-db`, `:5433`) |
 
 ## Ключевые файлы

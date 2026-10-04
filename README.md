@@ -61,9 +61,9 @@ Smart Library AI является **первоклассным компонен�
      версионируемые файлы (`services/ai-service/prompts/`) — направление развития.
     - **Оценка качества** (`services/ai-service/rag/evals/`) — набор из 21
       тестового вопроса (taste/self/author/genre/constraint/refuse) с ожидаемыми
-      книгами; скрипт `scripts/eval-rag.ps1` (метрики precision@k, recall@k,
-      hit@k, MRR; пороги; отчёты); 53 offline-теста (`tests/`). Прогон:
-      `powershell -File scripts/eval-rag.ps1 -ValidateOnly` (бесплатно, без сети).
+       книгами; скрипт `services/ai-service/rag/scripts/eval-rag.ps1` (метрики precision@k, recall@k,
+       hit@k, MRR; пороги; отчёты); 53 offline-теста (`tests/`). Прогон:
+       `powershell -File services/ai-service/rag/scripts/eval-rag.ps1 -ValidateOnly` (бесплатно, без сети).
 
    **Как устроен RAG-конвейер (работающий прототип):**
 
@@ -96,31 +96,34 @@ Smart Library AI является **первоклассным компонен�
 | Общий `pkg/` (logger, config, migrate)                | готово                                                 |
 | Book Service (proto, domain, service, repository, handler, server) | готово, хранилище in-memory         |
 | Book Service REST + Swagger UI (grpc-gateway, `:8091`) | готово                                                |
-| Book Service PostgreSQL repository                     | не начато; миграция `001_init.sql` готова              |
+| Book Service PostgreSQL repository                     | в работе — `#9` (PG 17 + `pgx/v5`); миграция `001_init.sql` готова |
 | User Service (proto, domain, security, service, handler, server) | готово, хранилище **PostgreSQL** (argon2id + bearer-токены) |
 | User Service REST + Swagger UI (grpc-gateway, `:8092`) | готово                                                |
 | Миграции User Service (`pkg/migrate`, embed FS)        | готовы, применяются при старте                         |
-| Loan / Notification Service, API Gateway               | не начато                                              |
-| Межсервисные gRPC-клиенты, события, discovery          | не начато (User Service отдаёт `AuthenticateToken` для будущего gateway) |
-| CI (GitHub Actions: build + test)                     | готово (PR #28)                                        |
-| Контейнеризация (Dockerfile + compose для сервисов)   | не начато (issue #6)                                   |
-| Брокер сообщений: выбор и локальная инфраструктура    | готово: ADR-0001 (RabbitMQ), `docker-compose.yml`; реализация — #14 |
-| AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста; артефакты в `services/ai-service/rag/` |
-| AI Service: Go-адаптер `ai.v1.AiService`              | не начато (issue #23); архитектура — ADR-0002          |
+| Локальный запуск сервисов                              | `cd services/book-service` (gRPC `:8081`, REST `:8091`) / `cd services/user-service` (gRPC `:8082`, REST `:8092`) |
+| Контейнеризация (multi-stage Dockerfile + compose)    | готово — `#6` (PR #39); сервисы + 3 БД + RabbitMQ в `docker-compose.yml`, healthcheck `GET /healthz` |
+| CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28)                                |
+| OpenAPI/Swagger из proto-аннотаций                    | готово: `grpc-gateway` генерирует REST-маршруты и `swagger.json` (embed в сервисы) |
+| Брокер сообщений: выбор и локальная инфраструктура    | готово: ADR-0001 (RabbitMQ), `docker-compose.yml`; реализация продюсеров/консьюмеров — `#14` |
+| AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
+| AI Service: Go-адаптер `ai.v1.AiService`              | не начато — `#23`; архитектура — ADR-0002              |
+| Loan / Notification Service                            | не начато (задачи не заведены)                         |
+| API Gateway                                            | не начато — `#10`                                     |
+| Межсервисные gRPC-клиенты, discovery                  | не начато; User Service отдаёт `AuthenticateToken` для gateway; discovery — `#8` |
 
-Локальный запуск Book Service:
+Локальный запуск Book Service (хранилище in-memory, внешние зависимости не нужны):
 
 ```bash
-cd book-service
+cd services/book-service
 go run ./cmd/server     # gRPC на :8081, REST + Swagger на :8091
 ```
 
 Локальный запуск User Service (нужна база PostgreSQL — поднимается через
 `docker compose up -d user-db`; переменные сида `USER_SERVICE_SEED_LIBRARIAN_*`
-описаны в `user-service/README.md`):
+описаны в `services/user-service/README.md`):
 
 ```bash
-cd user-service
+cd services/user-service
 go run ./cmd/server     # gRPC на :8082, REST + Swagger на :8092
 ```
 
@@ -182,13 +185,14 @@ smart-library/
 │   │   └── 0002-ai-recommendation-architecture.md  # архитектура AI-сервиса
 │   └── ai-first-principles.md  # принципы AI-first подхода
 ├── scripts/
-│   └── gen_proto.ps1    # кодогенерация protoc + go/go-grpc/grpc-gateway/openapiv2
+│   ├── gen_proto.ps1    # кодогенерация protoc + go/go-grpc/grpc-gateway/openapiv2
+│   └── eval-rag.ps1     # прогон eval-набора RAG (precision@k, recall@k, hit@k, MRR)
 ├── third_party/         # vendored .proto includes (google/api, openapiv2 options)
 ├── tools/
 │   └── protoc/          # локальный protoc 36.2
 ├── pkg/                 # общие библиотеки (config, logger, migrate)
 └── services/
-    ├── book-service/    # реализован, см. book-service/README.md
+    ├── book-service/    # реализован, см. services/book-service/README.md
     │   ├── Dockerfile   # multi-stage образ (контекст сборки — корень репозитория)
     │   ├── cmd/server/
     │   ├── proto/book/v1/
@@ -196,7 +200,7 @@ smart-library/
     │   ├── docs/        # swagger.json (генерация) + обёртка go:embed
     │   ├── internal/    # domain, repository (in-memory), service, handler
     │   └── migrations/
-    ├── user-service/    # реализован, см. user-service/README.md
+    ├── user-service/    # реализован, см. services/user-service/README.md
     │   ├── Dockerfile   # multi-stage образ (контекст сборки — корень репозитория)
     │   ├── cmd/server/
     │   ├── proto/user/v1/
@@ -204,12 +208,15 @@ smart-library/
     │   ├── docs/        # swagger.json (генерация) + обёртка go:embed
     │   ├── internal/    # domain, security, repository (postgres), service, handler
     │   └── migrations/
-    ├── ai-service/      # ADR-0002; RAG-прототип работает, см. services/ai-service/README.md
-    │   └── rag/         # рабочий прототип RAG (n8n workflow, pgvector схема, скрипты)
-    ├── api-gateway/     # не начато
-    ├── loan-service/    # не начато
-    └── notification-service/ # не начато
+    └── ai-service/      # ADR-0002; RAG-прототип работает, см. services/ai-service/README.md
+        └── rag/         # рабочий прототип RAG: n8n workflow, pgvector схема (db/),
+                         # скрипты (scripts/), документация (docs/),
+                         # evals/ — 21 вопрос с ожидаемыми книгами,
+                         # tests/ — 53 offline-теста, .env.example — шаблон переменных
 ```
+
+Сервисы `api-gateway`, `loan-service` и `notification-service` из архитектурной
+таблицы ещё не созданы как директории.
 
 Для локальной разработки нескольких модулей одновременно используется Go-воркспейс
 (`go.work`).
