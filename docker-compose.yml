@@ -78,9 +78,8 @@ services:
       retries: 20
       start_period: 20s
 
-  # Database for the Book Service. The Book Service still runs on its in-memory
-  # repository (the PostgreSQL switch is tracked separately), so this database
-  # is provisioned here as preparation and is not yet referenced by the service.
+  # Database for the Book Service. The service stores its catalog here through
+  # pgx/v5 and applies migrations/001_init.sql on startup.
   # Published on host port 5434, alongside user-db on 5432 and ai-rag-db on 5433.
   book-db:
     image: postgres:17
@@ -128,8 +127,7 @@ services:
       USER_SERVICE_SEED_LIBRARIAN_PASSWORD: ${USER_SERVICE_SEED_LIBRARIAN_PASSWORD:-}
     restart: unless-stopped
 
-  # Book Service container. Runs on its in-memory repository, so it has no
-  # database dependency yet (see the book-db note above).
+  # Book Service container. Stores its catalog in book-db over pgx/v5.
   book-service:
     build:
       context: .
@@ -137,6 +135,9 @@ services:
     image: library/book-service:local
     container_name: library-book-service
     hostname: library-book-service
+    depends_on:
+      book-db:
+        condition: service_healthy
     ports:
       - "8081:8081"  # gRPC API
       - "8091:8091"  # REST + Swagger + /healthz
@@ -144,6 +145,9 @@ services:
       BOOK_SERVICE_GRPC_ADDR: ":8081"
       BOOK_SERVICE_HTTP_ADDR: ":8091"
       BOOK_SERVICE_LOG_LEVEL: ${BOOK_SERVICE_LOG_LEVEL:-info}
+      # Inside the compose network the database is reachable by its service
+      # name, not 127.0.0.1.
+      BOOK_SERVICE_DB_DSN: host=book-db port=5432 user=${BOOK_SERVICE_DB_USER:-library} password=${BOOK_SERVICE_DB_PASSWORD:-library} dbname=${BOOK_SERVICE_DB_NAME:-library_books} sslmode=disable
     restart: unless-stopped
 
 volumes:

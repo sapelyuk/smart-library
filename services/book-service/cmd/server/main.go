@@ -22,10 +22,12 @@ import (
 
 	pkgconfig "github.com/sapelyuk/smart-library/pkg/config"
 	"github.com/sapelyuk/smart-library/pkg/logger"
+	"github.com/sapelyuk/smart-library/pkg/migrate"
 	bookv1 "github.com/sapelyuk/smart-library/services/book-service/gen/go/book/v1"
 	"github.com/sapelyuk/smart-library/services/book-service/internal/handler"
-	"github.com/sapelyuk/smart-library/services/book-service/internal/repository/memory"
+	"github.com/sapelyuk/smart-library/services/book-service/internal/repository/postgres"
 	"github.com/sapelyuk/smart-library/services/book-service/internal/service"
+	"github.com/sapelyuk/smart-library/services/book-service/migrations"
 )
 
 // healthService matches the proto package of the API.
@@ -37,15 +39,27 @@ type appConfig struct {
 	logLevel        string
 	logFormat       string
 	shutdownTimeout time.Duration
+	// Database configuration. The service requires a PostgreSQL DSN: there is
+	// no in-memory fallback in production code.
+	dbDSN             string
+	dbMigrate         bool
+	dbMaxOpenConns    int
+	dbMaxIdleConns    int
+	dbConnMaxLifetime time.Duration
 }
 
 func loadConfig() appConfig {
 	return appConfig{
-		grpcAddr:        pkgconfig.String("BOOK_SERVICE_GRPC_ADDR", ":8081"),
-		httpAddr:        pkgconfig.String("BOOK_SERVICE_HTTP_ADDR", ":8091"),
-		logLevel:        pkgconfig.String("BOOK_SERVICE_LOG_LEVEL", "info"),
-		logFormat:       pkgconfig.String("BOOK_SERVICE_LOG_FORMAT", "json"),
-		shutdownTimeout: pkgconfig.Duration("BOOK_SERVICE_SHUTDOWN_TIMEOUT", 15*time.Second),
+		grpcAddr:          pkgconfig.String("BOOK_SERVICE_GRPC_ADDR", ":8081"),
+		httpAddr:          pkgconfig.String("BOOK_SERVICE_HTTP_ADDR", ":8091"),
+		logLevel:          pkgconfig.String("BOOK_SERVICE_LOG_LEVEL", "info"),
+		logFormat:         pkgconfig.String("BOOK_SERVICE_LOG_FORMAT", "json"),
+		shutdownTimeout:   pkgconfig.Duration("BOOK_SERVICE_SHUTDOWN_TIMEOUT", 15*time.Second),
+		dbDSN:             pkgconfig.String("BOOK_SERVICE_DB_DSN", ""),
+		dbMigrate:         pkgconfig.Bool("BOOK_SERVICE_DB_MIGRATE", true),
+		dbMaxOpenConns:    pkgconfig.Int("BOOK_SERVICE_DB_MAX_OPEN_CONNS", 25),
+		dbMaxIdleConns:    pkgconfig.Int("BOOK_SERVICE_DB_MAX_IDLE_CONNS", 5),
+		dbConnMaxLifetime: pkgconfig.Duration("BOOK_SERVICE_DB_CONN_MAX_LIFETIME", 30*time.Minute),
 	}
 }
 
@@ -67,7 +81,37 @@ func main() {
 }
 
 func run(cfg appConfig, log *slog.Logger) error {
-	store := memory.NewStore()
+	if cfg.dbDSN == "" {
+		return errors.New("BOOK_SERVICE_DB_DSN is required")
+	}
+
+	db, err := postgres.Open(cfg.dbDSN, cfg.dbMaxOpenConns, cfg.dbMaxIdleConns, cfg.dbConnMaxLifetime)
+	if err != nil {
+		return err
+	}
+
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if cfg.dbMigrate {
+		applied, err := migrate.Apply(ctx, db, migrations.FS, ".", log)
+		if err != nil {
+			return err
+		}
+
+		log.Info("migrations checked", "applied", applied)
+	}
+
+	store := postgres.NewStore(db)
+
+	log.Info("book-service listening", "addr", cfg.grpcAddr, "storage", "postgresql")
+
 	bookService := service.NewBookService(store, store)
 
 	grpcServer := grpc.NewServer()
@@ -93,8 +137,6 @@ func run(cfg appConfig, log *slog.Logger) error {
 	serveErr := make(chan error, 1)
 
 	go func() {
-		log.Info("book-service listening", "addr", cfg.grpcAddr, "storage", "in-memory")
-
 		if err := grpcServer.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			serveErr <- err
 
@@ -115,9 +157,6 @@ func run(cfg appConfig, log *slog.Logger) error {
 
 		serveErr <- nil
 	}()
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	select {
 	case err := <-serveErr:

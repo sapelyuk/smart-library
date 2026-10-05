@@ -44,6 +44,23 @@ func Duration(key string, fallback time.Duration) time.Duration {
 	return parsed
 }
 
+// Bool returns a boolean value of the environment variable or fallback.
+// Recognized truthy values: "1", "true", "yes", "on".
+func Bool(key string, fallback bool) bool {
+	value, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
 // RequireString fails fast when a mandatory variable is missing.
 func RequireString(key string) (string, error) {
 	value := strings.TrimSpace(os.Getenv(key))

@@ -10,8 +10,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/sapelyuk/smart-library/services/book-service/internal/domain"
-	"github.com/sapelyuk/smart-library/services/book-service/internal/repository/memory"
+	"github.com/sapelyuk/smart-library/services/book-service/internal/repository/postgres"
 	"github.com/sapelyuk/smart-library/services/book-service/internal/service"
+	"github.com/sapelyuk/smart-library/services/book-service/internal/testdb"
 )
 
 const (
@@ -19,11 +20,12 @@ const (
 	isbnB = "978-0-306-40615-7"
 )
 
-// newService wires the service on top of the in-memory store.
+// newService wires the service on top of a real PostgreSQL store. The tests are
+// not parallel: they share one database and truncate it between cases.
 func newService(t *testing.T) *service.BookService {
 	t.Helper()
 
-	store := memory.NewStore()
+	store := postgres.NewStore(testdb.New(t))
 
 	return service.NewBookService(store, store)
 }
@@ -46,7 +48,6 @@ func createBook(t *testing.T, svc *service.BookService, isbn, title string) *dom
 }
 
 func TestCreateBookThenGet(t *testing.T) {
-	t.Parallel()
 
 	ctx := context.Background()
 	svc := newService(t)
@@ -69,7 +70,6 @@ func TestCreateBookThenGet(t *testing.T) {
 }
 
 func TestCreateBookRejectsDuplicateISBN(t *testing.T) {
-	t.Parallel()
 
 	ctx := context.Background()
 	svc := newService(t)
@@ -85,7 +85,6 @@ func TestCreateBookRejectsDuplicateISBN(t *testing.T) {
 }
 
 func TestGetBookUnknownID(t *testing.T) {
-	t.Parallel()
 
 	_, err := newService(t).GetBook(context.Background(), uuid.New())
 	if !errors.Is(err, domain.ErrNotFound) {
@@ -94,7 +93,6 @@ func TestGetBookUnknownID(t *testing.T) {
 }
 
 func TestInventoryLifecycle(t *testing.T) {
-	t.Parallel()
 
 	ctx := context.Background()
 	svc := newService(t)
@@ -174,7 +172,6 @@ func TestInventoryLifecycle(t *testing.T) {
 }
 
 func TestDeleteBookGuardsActiveLoans(t *testing.T) {
-	t.Parallel()
 
 	ctx := context.Background()
 	svc := newService(t)
@@ -215,7 +212,6 @@ func TestDeleteBookGuardsActiveLoans(t *testing.T) {
 }
 
 func TestUpdateBookPartial(t *testing.T) {
-	t.Parallel()
 
 	ctx := context.Background()
 	svc := newService(t)
@@ -249,7 +245,6 @@ func TestUpdateBookPartial(t *testing.T) {
 }
 
 func TestListBooksSearchAndPaging(t *testing.T) {
-	t.Parallel()
 
 	ctx := context.Background()
 	svc := newService(t)
@@ -302,7 +297,6 @@ func TestListBooksSearchAndPaging(t *testing.T) {
 }
 
 func TestListBooksCapsLimit(t *testing.T) {
-	t.Parallel()
 
 	ctx := context.Background()
 	svc := newService(t)
@@ -354,7 +348,6 @@ func isbn13(seq int) string {
 }
 
 func TestBorrowUnknownBook(t *testing.T) {
-	t.Parallel()
 
 	_, err := newService(t).BorrowBookCopy(context.Background(), uuid.New())
 	if !errors.Is(err, domain.ErrNotFound) {
