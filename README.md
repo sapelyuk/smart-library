@@ -94,15 +94,15 @@ Smart Library AI является **первоклассным компонен�
 | Компонент                                             | Состояние                                              |
 |-------------------------------------------------------|--------------------------------------------------------|
 | Общий `pkg/` (logger, config, migrate)                | готово                                                 |
-| Book Service (proto, domain, service, repository, handler, server) | готово, хранилище in-memory         |
+| Book Service (proto, domain, service, repository, handler, server) | готово, хранилище **PostgreSQL** (PG 17 + `pgx/v5`) |
 | Book Service REST + Swagger UI (grpc-gateway, `:8091`) | готово                                                |
-| Book Service PostgreSQL repository                     | в работе — `#9` (PG 17 + `pgx/v5`); миграция `001_init.sql` готова |
+| Book Service PostgreSQL repository                     | готово — `#9` (PG 17 + `pgx/v5`): миграции при старте, `FOR UPDATE SKIP LOCKED`, тесты против PG |
 | User Service (proto, domain, security, service, handler, server) | готово, хранилище **PostgreSQL** (argon2id + bearer-токены) |
 | User Service REST + Swagger UI (grpc-gateway, `:8092`) | готово                                                |
 | Миграции User Service (`pkg/migrate`, embed FS)        | готовы, применяются при старте                         |
 | Локальный запуск сервисов                              | `cd services/book-service` (gRPC `:8081`, REST `:8091`) / `cd services/user-service` (gRPC `:8082`, REST `:8092`) |
 | Контейнеризация (multi-stage Dockerfile + compose)    | готово — `#6` (PR #39); сервисы + 3 БД + RabbitMQ в `docker-compose.yml`, healthcheck `GET /healthz` |
-| CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28)                                |
+| CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book-service идут против сервис-контейнера `postgres:17` |
 | OpenAPI/Swagger из proto-аннотаций                    | готово: `grpc-gateway` генерирует REST-маршруты и `swagger.json` (embed в сервисы) |
 | Брокер сообщений: выбор и локальная инфраструктура    | готово: ADR-0001 (RabbitMQ), `docker-compose.yml`; реализация продюсеров/консьюмеров — `#14` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
@@ -110,11 +110,15 @@ Smart Library AI является **первоклассным компонен�
 | Loan / Notification Service                            | не начато (задачи не заведены)                         |
 | API Gateway                                            | не начато — `#10`                                     |
 | Межсервисные gRPC-клиенты, discovery                  | не начато; User Service отдаёт `AuthenticateToken` для gateway; discovery — `#8` |
+| User Service: техдолг (хранилище и API)                | `#32` (pgx вместо lib/pq), `#33` (pg_trgm + keyset-пагинация), `#34` (rate limiting), `#31` (кэш валидации сессий) |
 
-Локальный запуск Book Service (хранилище in-memory, внешние зависимости не нужны):
+Локальный запуск Book Service (нужна база PostgreSQL — поднимается через
+`docker compose up -d book-db`; `BOOK_SERVICE_DB_DSN` обязателен, миграции
+применяются при старте):
 
 ```bash
 cd services/book-service
+export BOOK_SERVICE_DB_DSN='host=localhost port=5434 user=library password=library dbname=library_books sslmode=disable'
 go run ./cmd/server     # gRPC на :8081, REST + Swagger на :8091
 ```
 
@@ -149,7 +153,7 @@ docker compose down -v          # остановить и удалить volume
 
 Состав `docker-compose.yml`:
 
-| Контейнер | Образ | Порты хоста |
+| Сервис (compose-ключ) | Образ | Порты хоста |
 | --- | --- | --- |
 | `book-service` | build `services/book-service/Dockerfile` | `8081` (gRPC), `8091` (REST + Swagger + `/healthz`) |
 | `user-service` | build `services/user-service/Dockerfile` | `8082` (gRPC), `8092` (REST + Swagger + `/healthz`) |
@@ -157,6 +161,8 @@ docker compose down -v          # остановить и удалить volume
 | `user-db` | `postgres:17` | `5432` |
 | `ai-rag-db` | `pgvector/pgvector:pg17` | `5433` |
 | `rabbitmq` | `rabbitmq:4-management` | `5672`, `15672` |
+
+Контейнеры создаются с префиксом `library-` (через `container_name` в `docker-compose.yml`): `library-book-service`, `library-user-service`, `library-book-db`, `library-user-db`, `library-ai-rag-db`, `library-rabbitmq`.
 
 Оба Dockerfile'а — multi-stage (`golang:1.27-alpine` → `alpine:3.21`), собираются из **корня репозитория**:
 модули используют `replace ... => ../../pkg`, поэтому контекст сборки — корень, а не каталог сервиса.
@@ -185,11 +191,11 @@ smart-library/
 │   │   └── 0002-ai-recommendation-architecture.md  # архитектура AI-сервиса
 │   └── ai-first-principles.md  # принципы AI-first подхода
 ├── scripts/
-│   ├── gen_proto.ps1    # кодогенерация protoc + go/go-grpc/grpc-gateway/openapiv2
-│   └── eval-rag.ps1     # прогон eval-набора RAG (precision@k, recall@k, hit@k, MRR)
+│   └── gen_proto.ps1    # кодогенерация protoc + go/go-grpc/grpc-gateway/openapiv2
 ├── third_party/         # vendored .proto includes (google/api, openapiv2 options)
 ├── tools/
 │   └── protoc/          # локальный protoc 36.2
+├── internal/            # артефакт до реструктуризации #19 (не импортируется; кандидат на удаление)
 ├── pkg/                 # общие библиотеки (config, logger, migrate)
 └── services/
     ├── book-service/    # реализован, см. services/book-service/README.md
@@ -198,7 +204,7 @@ smart-library/
     │   ├── proto/book/v1/
     │   ├── gen/go/      # генерация, не править руками
     │   ├── docs/        # swagger.json (генерация) + обёртка go:embed
-    │   ├── internal/    # domain, repository (in-memory), service, handler
+    │   ├── internal/    # domain, repository (postgres), testdb, service, handler
     │   └── migrations/
     ├── user-service/    # реализован, см. services/user-service/README.md
     │   ├── Dockerfile   # multi-stage образ (контекст сборки — корень репозитория)

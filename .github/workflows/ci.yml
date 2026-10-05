@@ -53,6 +53,25 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     needs: build
+    services:
+      # PostgreSQL for the book-service storage tests. The tests apply the
+      # service migrations themselves and are skipped when POSTGRES_TEST_DSN
+      # is not set, so the other modules are unaffected by this service.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: library
+          POSTGRES_PASSWORD: library
+          POSTGRES_DB: library_books_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U library -d library_books_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      POSTGRES_TEST_DSN: host=localhost port=5432 user=library password=library dbname=library_books_test sslmode=disable
     steps:
       - uses: actions/checkout@v4
 

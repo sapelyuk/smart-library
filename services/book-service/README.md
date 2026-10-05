@@ -16,9 +16,10 @@ book-service/
 ├── internal/
 │   ├── domain/            # сущности Book/Copy, валидация ISBN, доменные ошибки
 │   ├── service/           # бизнес-логика (use-case'ы)
-│   ├── repository/        # порт хранилища + in-memory реализация
+│   ├── repository/        # порт хранилища + PostgreSQL-реализация (pgx)
+│   ├── testdb/            # провижининг тестовой БД (миграции, advisory-lock)
 │   └── handler/           # grpc.go: прото <-> домен; http.go: gateway + Swagger UI
-└── migrations/            # SQL-схема для PostgreSQL
+└── migrations/            # SQL-схема PostgreSQL + embed для pkg/migrate
 ```
 
 Зависимости направлены строго внутрь: `handler -> service -> repository -> domain`.
@@ -27,18 +28,26 @@ book-service/
 
 ## Хранилище
 
-Сейчас — **in-memory** (`internal/repository/memory`): данные живут только пока
-работает процесс. Репозиторий спроектирован под переезд на PostgreSQL:
+**PostgreSQL 17** через `github.com/jackc/pgx/v5/stdlib` (драйвер `database/sql`).
+Схема применяется на старте через `pkg/migrate` (`BOOK_SERVICE_DB_MIGRATE=true`),
+миграции встроены в бинарник (`//go:embed`). Хранилища в памяти у сервиса нет:
+`BOOK_SERVICE_DB_DSN` обязателен, без него процесс завершается с ошибкой.
 
-- уникальность ISBN и штрихкодов обеспечена на уровне хранилища;
-- `AcquireAvailable` выполняет выдачу под write-lock — у PostgreSQL-реализации
-  это будет `SELECT ... FOR UPDATE SKIP LOCKED`;
-- реляционная схема — в `migrations/001_init.sql`.
+Схема (`migrations/001_init.sql`) держит инварианты на уровне БД:
+
+- `UNIQUE (isbn)` (`citext`) — `978-5-...` и `9785...` это одна книга;
+- `UNIQUE (barcode)` и `CHECK (status IN (...))` — состояние экземпляра;
+- `book_copies.book_id → books.id` c `ON DELETE RESTRICT` — история выдач не теряется;
+- ICU-коллация `ru_RU_icu` — корректный `ILIKE` и сортировка для кириллицы;
+- `AcquireAvailable` — транзакция с `FOR SHARE` на книге и
+  `SELECT ... FOR UPDATE SKIP LOCKED` на экземпляре: параллельные выдачи
+  не отдают один и тот же экземпляр.
 
 ## Запуск
 
 ```bash
 cd book-service
+export BOOK_SERVICE_DB_DSN='host=localhost port=5434 user=library password=library dbname=library_books sslmode=disable'
 go run ./cmd/server
 ```
 
@@ -51,6 +60,11 @@ go run ./cmd/server
 | `BOOK_SERVICE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `BOOK_SERVICE_LOG_FORMAT` | `json` | `json` или `text` |
 | `BOOK_SERVICE_SHUTDOWN_TIMEOUT` | `15s` | таймаут graceful shutdown |
+| `BOOK_SERVICE_DB_DSN` | — | **обязателен**, DSN PostgreSQL |
+| `BOOK_SERVICE_DB_MIGRATE` | `true` | применять миграции при старте |
+| `BOOK_SERVICE_DB_MAX_OPEN_CONNS` | `25` | максимум открытых соединений |
+| `BOOK_SERVICE_DB_MAX_IDLE_CONNS` | `5` | максимум простаивающих соединений |
+| `BOOK_SERVICE_DB_CONN_MAX_LIFETIME` | `30m` | время жизни соединения |
 
 Останов по `Ctrl+C` — graceful shutdown: сначала снимается health-статус
 `SERVING`, закрывается HTTP-сервер, затем `GracefulStop` с таймаутом.
@@ -183,9 +197,22 @@ go vet ./...
 go test ./...
 ```
 
+Тесты хранилища и сервиса требуют PostgreSQL: при отсутствии переменной
+`POSTGRES_TEST_DSN` они пропускаются. Локально:
+
+```bash
+# поднять book-db из корня репозитория
+docker compose up -d book-db
+# в PowerShell
+$env:POSTGRES_TEST_DSN='host=localhost port=5434 user=library password=library dbname=library_books sslmode=disable'
+go test ./...
+```
+
+Схема тестовой БД накатывается автоматически (`internal/testdb`), таблицы
+очищаются перед каждым тестом. В CI база поднимается сервис-контейнером
+`postgres:17` и тот же DSN задаётся в переменной окружения.
+
 ## Ограничения текущей версии
 
-- Хранилище in-memory: рестарт процесса очищает данные; PostgreSQL-реализация
-  репозитория — в планах (миграция уже написана).
 - Нет аутентификации: сервис рассчитан на внутренние вызовы через gateway.
-- Событий (NATS/Kafka) пока нет — другие сервисы используют только gRPC.
+- Событий (RabbitMQ) пока нет — другие сервисы используют только gRPC.

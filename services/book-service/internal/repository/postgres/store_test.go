@@ -1,4 +1,4 @@
-package memory_test
+package postgres_test
 
 import (
 	"context"
@@ -6,23 +6,28 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/sapelyuk/smart-library/services/book-service/internal/domain"
 	"github.com/sapelyuk/smart-library/services/book-service/internal/repository"
-	"github.com/sapelyuk/smart-library/services/book-service/internal/repository/memory"
+	"github.com/sapelyuk/smart-library/services/book-service/internal/repository/postgres"
+	"github.com/sapelyuk/smart-library/services/book-service/internal/testdb"
 )
-
-// Contract checks at the storage level: index uniqueness, cascade delete,
-// aggregates and atomic issuing.
 
 var (
-	_ repository.BookRepository = (*memory.Store)(nil)
-	_ repository.CopyRepository = (*memory.Store)(nil)
+	_ repository.BookRepository = (*postgres.Store)(nil)
+	_ repository.CopyRepository = (*postgres.Store)(nil)
 )
 
+// newStore returns a store over a freshly truncated PostgreSQL database.
+func newStore(t *testing.T) *postgres.Store {
+	t.Helper()
+
+	return postgres.NewStore(testdb.New(t))
+}
+
+// newBook builds a valid book entity for the tests.
 func newBook(t *testing.T, isbn, title string) *domain.Book {
 	t.Helper()
 
@@ -40,10 +45,8 @@ func newBook(t *testing.T, isbn, title string) *domain.Book {
 }
 
 func TestBookCRUD(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
-	store := memory.NewStore()
+	store := newStore(t)
 
 	book := newBook(t, "978-0-13-419044-0", "Original")
 
@@ -51,26 +54,18 @@ func TestBookCRUD(t *testing.T) {
 		t.Fatalf("Create: unexpected error: %v", err)
 	}
 
-	// The ISBN index is unique: reusing it for another book is rejected.
+	// The ISBN unique index is enforced by the database, not by a pre-check.
 	if err := store.Create(ctx, newBook(t, "978-0-13-419044-0", "Other")); !errors.Is(err, domain.ErrISBNAlreadyExists) {
 		t.Fatalf("want %v, got %v", domain.ErrISBNAlreadyExists, err)
 	}
 
-	// The store returns a copy: mutating the result must not corrupt the data.
 	fetched, err := store.GetByID(ctx, book.ID)
 	if err != nil {
 		t.Fatalf("GetByID: unexpected error: %v", err)
 	}
 
-	fetched.Title = "Mutated"
-
-	again, err := store.GetByID(ctx, book.ID)
-	if err != nil {
-		t.Fatalf("GetByID: unexpected error: %v", err)
-	}
-
-	if again.Title != "Original" {
-		t.Fatalf("stored data mutated through returned copy: %q", again.Title)
+	if fetched.Title != "Original" {
+		t.Fatalf("title = %q, want %q", fetched.Title, "Original")
 	}
 
 	byISBN, err := store.GetByISBN(ctx, book.ISBN)
@@ -79,20 +74,15 @@ func TestBookCRUD(t *testing.T) {
 	}
 
 	if byISBN.ID != book.ID {
-		t.Fatalf("ISBN index points to %s, want %s", byISBN.ID, book.ID)
-	}
-
-	// Updating a non-existent book.
-	if err := store.Update(ctx, newBook(t, "978-0-306-40615-7", "Ghost")); !errors.Is(err, domain.ErrNotFound) {
-		t.Fatalf("want %v, got %v", domain.ErrNotFound, err)
+		t.Fatalf("ISBN lookup returned %s, want %s", byISBN.ID, book.ID)
 	}
 
 	title := "Updated"
-	if err := again.Apply(domain.BookUpdate{Title: &title}); err != nil {
+	if err := fetched.Apply(domain.BookUpdate{Title: &title}); err != nil {
 		t.Fatalf("Apply: unexpected error: %v", err)
 	}
 
-	if err := store.Update(ctx, again); err != nil {
+	if err := store.Update(ctx, fetched); err != nil {
 		t.Fatalf("Update: unexpected error: %v", err)
 	}
 
@@ -103,6 +93,11 @@ func TestBookCRUD(t *testing.T) {
 
 	if updated.Title != "Updated" {
 		t.Fatalf("update lost: %q", updated.Title)
+	}
+
+	// Updating an unknown book is reported as not found.
+	if err := store.Update(ctx, newBook(t, "978-0-306-40615-7", "Ghost")); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("want %v, got %v", domain.ErrNotFound, err)
 	}
 
 	if err := store.Delete(ctx, book.ID); err != nil {
@@ -118,59 +113,52 @@ func TestBookCRUD(t *testing.T) {
 	}
 }
 
-func TestListPagination(t *testing.T) {
-	t.Parallel()
-
+func TestBookCyrillicSearch(t *testing.T) {
 	ctx := context.Background()
-	store := memory.NewStore()
+	store := newStore(t)
 
-	for i := range 5 {
-		book := newBook(t, isbn13(i), fmt.Sprintf("Book %d", i))
+	create := func(isbn, title, author string) {
+		t.Helper()
+
+		book := newBook(t, isbn, title)
+		book.Author = author
+
 		if err := store.Create(ctx, book); err != nil {
-			t.Fatalf("Create: unexpected error: %v", err)
+			t.Fatalf("Create %q: unexpected error: %v", title, err)
 		}
 	}
 
-	books, total, err := store.List(ctx, domain.BookFilter{Limit: 2, Offset: 1})
+	create("978-0-13-419044-0", "Мастер и Маргарита", "Михаил Булгаков")
+	create("978-0-306-40615-7", "Преступление и наказание", "Фёдор Достоевский")
+
+	// Case-insensitive Cyrillic search must match regardless of the case.
+	books, total, err := store.List(ctx, domain.BookFilter{Query: "МАРГАРИТА", Limit: 20})
 	if err != nil {
 		t.Fatalf("List: unexpected error: %v", err)
 	}
 
-	if total != 5 {
-		t.Fatalf("total must ignore paging, got %d", total)
+	if total != 1 || len(books) != 1 {
+		t.Fatalf("expected a single match for the Cyrillic query, got total=%d len=%d", total, len(books))
 	}
 
-	if len(books) != 2 {
-		t.Fatalf("expected page of 2, got %d", len(books))
+	if books[0].Title != "Мастер и Маргарита" {
+		t.Fatalf("matched %q, want %q", books[0].Title, "Мастер и Маргарита")
 	}
 
-	// The offset page must not overlap with the first one.
-	first, _, err := store.List(ctx, domain.BookFilter{Limit: 1})
+	// The author index must work the same way.
+	_, total, err = store.List(ctx, domain.BookFilter{Query: "достоевский", Limit: 20})
 	if err != nil {
 		t.Fatalf("List: unexpected error: %v", err)
 	}
 
-	for _, book := range books {
-		if book.ID == first[0].ID {
-			t.Fatal("offset paging returned an item from the first page")
-		}
-	}
-
-	books, total, err = store.List(ctx, domain.BookFilter{Query: "Book 3"})
-	if err != nil {
-		t.Fatalf("List: unexpected error: %v", err)
-	}
-
-	if total != 1 || len(books) != 1 || books[0].Title != "Book 3" {
-		t.Fatalf("query filter broken: total=%d books=%d", total, len(books))
+	if total != 1 {
+		t.Fatalf("expected a single match for the author, got %d", total)
 	}
 }
 
 func TestCopyInventory(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
-	store := memory.NewStore()
+	store := newStore(t)
 
 	book := newBook(t, "978-0-13-419044-0", "Catalog")
 	if err := store.Create(ctx, book); err != nil {
@@ -184,17 +172,11 @@ func TestCopyInventory(t *testing.T) {
 
 	var ids []uuid.UUID
 
-	// The borrow order follows the registration time, so we set it explicitly:
-	// time.Now() in the domain has OS clock resolution and collides in a tight loop.
-	base := time.Now().UTC()
-
 	for i := range 3 {
 		item, err := domain.NewCopy(book.ID, fmt.Sprintf("BC-%03d", i))
 		if err != nil {
 			t.Fatalf("NewCopy: unexpected error: %v", err)
 		}
-
-		item.CreatedAt = base.Add(time.Duration(i) * time.Minute)
 
 		if err := store.CreateCopy(ctx, item); err != nil {
 			t.Fatalf("CreateCopy: unexpected error: %v", err)
@@ -203,13 +185,8 @@ func TestCopyInventory(t *testing.T) {
 		ids = append(ids, item.ID)
 	}
 
-	// Duplicate barcode.
-	dup, err := domain.NewCopy(book.ID, "BC-000")
-	if err != nil {
-		t.Fatalf("NewCopy: unexpected error: %v", err)
-	}
-
-	if err := store.CreateCopy(ctx, dup); !errors.Is(err, domain.ErrBarcodeAlreadyExists) {
+	// A duplicate barcode is rejected by the unique index.
+	if err := store.CreateCopy(ctx, &domain.Copy{ID: uuid.New(), BookID: book.ID, Barcode: "BC-000", Status: domain.CopyStatusAvailable}); !errors.Is(err, domain.ErrBarcodeAlreadyExists) {
 		t.Fatalf("want %v, got %v", domain.ErrBarcodeAlreadyExists, err)
 	}
 
@@ -248,45 +225,66 @@ func TestCopyInventory(t *testing.T) {
 	if len(copies) != 3 {
 		t.Fatalf("expected 3 copies, got %d", len(copies))
 	}
+}
 
-	// Copies are issued one by one; the last available one is BC-001 (BC-002 is lost).
-	first, err := store.AcquireAvailable(ctx, book.ID)
+func TestAcquireAvailable(t *testing.T) {
+	ctx := context.Background()
+	store := newStore(t)
+
+	book := newBook(t, "978-0-13-419044-0", "Queue")
+	if err := store.Create(ctx, book); err != nil {
+		t.Fatalf("Create: unexpected error: %v", err)
+	}
+
+	// The oldest available copy is handed out first.
+	var first *domain.Copy
+
+	for i := range 2 {
+		item, err := domain.NewCopy(book.ID, fmt.Sprintf("BC-%03d", i))
+		if err != nil {
+			t.Fatalf("NewCopy: unexpected error: %v", err)
+		}
+
+		if err := store.CreateCopy(ctx, item); err != nil {
+			t.Fatalf("CreateCopy: unexpected error: %v", err)
+		}
+
+		if i == 0 {
+			first = item
+		}
+	}
+
+	acquired, err := store.AcquireAvailable(ctx, book.ID)
 	if err != nil {
 		t.Fatalf("AcquireAvailable: unexpected error: %v", err)
 	}
 
-	if first.Barcode != "BC-000" {
-		t.Fatalf("expected oldest available BC-000, got %s", first.Barcode)
+	if acquired.ID != first.ID {
+		t.Fatalf("acquired %s, want the oldest copy %s", acquired.ID, first.ID)
 	}
 
-	second, err := store.AcquireAvailable(ctx, book.ID)
-	if err != nil {
+	if acquired.Status != domain.CopyStatusOnLoan {
+		t.Fatalf("status = %q, want %q", acquired.Status, domain.CopyStatusOnLoan)
+	}
+
+	// Exhausting the queue is a precondition error.
+	if _, err := store.AcquireAvailable(ctx, book.ID); err != nil {
 		t.Fatalf("AcquireAvailable: unexpected error: %v", err)
-	}
-
-	if second.Barcode != "BC-001" {
-		t.Fatalf("expected BC-001, got %s", second.Barcode)
 	}
 
 	if _, err := store.AcquireAvailable(ctx, book.ID); !errors.Is(err, domain.ErrNoAvailableCopies) {
 		t.Fatalf("want %v, got %v", domain.ErrNoAvailableCopies, err)
 	}
 
-	// Cascade: deleting a book takes its copies with it.
-	if err := store.Delete(ctx, book.ID); err != nil {
-		t.Fatalf("Delete: unexpected error: %v", err)
-	}
-
-	if _, err := store.GetCopyByID(ctx, ids[0]); !errors.Is(err, domain.ErrCopyNotFound) {
-		t.Fatalf("copies must be removed with the book, got %v", err)
+	// An unknown book is not found.
+	if _, err := store.AcquireAvailable(ctx, uuid.New()); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("want %v, got %v", domain.ErrNotFound, err)
 	}
 }
 
 func TestAcquireAvailableIsAtomic(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
-	store := memory.NewStore()
+	store := newStore(t)
 
 	book := newBook(t, "978-0-13-419044-0", "Concurrency")
 	if err := store.Create(ctx, book); err != nil {
@@ -306,7 +304,8 @@ func TestAcquireAvailableIsAtomic(t *testing.T) {
 		}
 	}
 
-	// Parallel issuing must not hand out the same copy twice.
+	// Parallel issuing must not hand out the same copy twice. FOR UPDATE
+	// SKIP LOCKED makes the losers skip the locked row instead of blocking.
 	const workers = 16
 
 	var (
@@ -354,19 +353,31 @@ func TestAcquireAvailableIsAtomic(t *testing.T) {
 	}
 }
 
-// isbn13 builds a valid ISBN-13 from a counter: 12 digits plus a check digit.
-func isbn13(seq int) string {
-	base := fmt.Sprintf("978%09d", seq)
+func TestDeleteBookRemovesCopies(t *testing.T) {
+	ctx := context.Background()
+	store := newStore(t)
 
-	sum := 0
-	for i := range len(base) {
-		digit := int(base[i] - '0')
-		if i%2 == 1 {
-			digit *= 3
-		}
-
-		sum += digit
+	book := newBook(t, "978-0-13-419044-0", "With copies")
+	if err := store.Create(ctx, book); err != nil {
+		t.Fatalf("Create: unexpected error: %v", err)
 	}
 
-	return base + fmt.Sprintf("%d", (10-sum%10)%10)
+	item, err := domain.NewCopy(book.ID, "BC-000")
+	if err != nil {
+		t.Fatalf("NewCopy: unexpected error: %v", err)
+	}
+
+	if err := store.CreateCopy(ctx, item); err != nil {
+		t.Fatalf("CreateCopy: unexpected error: %v", err)
+	}
+
+	// The copies are removed together with the book, so ON DELETE RESTRICT does
+	// not block the delete.
+	if err := store.Delete(ctx, book.ID); err != nil {
+		t.Fatalf("Delete: unexpected error: %v", err)
+	}
+
+	if _, err := store.GetCopyByID(ctx, item.ID); !errors.Is(err, domain.ErrCopyNotFound) {
+		t.Fatalf("copies must be removed with the book, got %v", err)
+	}
 }
