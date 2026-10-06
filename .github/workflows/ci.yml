@@ -111,3 +111,12 @@ jobs:
         if: always()
         run: go tool cover -func=coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
         working-directory: services/user-service
+
+      - name: Test api-gateway
+        run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic
+        working-directory: services/api-gateway
+
+      - name: Coverage report (api-gateway)
+        if: always()
+        run: go tool cover -func=coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
+        working-directory: services/api-gateway
