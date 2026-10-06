@@ -34,7 +34,7 @@
 | Бэкенд-сервисы | Book Service, User Service, RabbitMQ | ✅ готово |
 | Фронтенд | React SPA, потребляющая REST-контракты сервисов | 🔜 в плане |
 | AI-модуль | AI Service: ADR-0002 + RAG-прототип (n8n + pgvector + Gemini) | 🟡 прототип работает (#22), Go-адаптер — #23 |
-| Discovery | Consul или Kubernetes DNS | 🔜 в плане |
+| Discovery | Kubernetes DNS (Docker Compose DNS локально) | 📋 ADR-0003 принято |
 | CI/CD | GitHub Actions (CI: build + test) | 🟡 CI готов (PR #28); контейнеризация — в плане |
 
 **Приоритет:** фронтенд → AI-модуль → discovery → CI/CD.
@@ -127,7 +127,7 @@ smart-library/
 | Тесты User Service | домен, security (PR #11) и HTTP-слой (PR #26) — готово; сервис и репозиторий — нет |
 | API Gateway | нет (issue #10) |
 | Loan Service, Notification Service | нет, задачи не заведены |
-| gRPC-клиенты между сервисами, события, discovery | нет; брокер выбран — **RabbitMQ** (issue #7), discovery — issue #8 (`AuthenticateToken` User Service — подготовленная точка входа для gateway) |
+| gRPC-клиенты между сервисами, события, discovery | discovery: ADR-0003 принято (Kubernetes DNS); брокер: ADR-0001 (RabbitMQ); реализация — #14 |
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28) |
 | Контейнеризация | готово: multi-stage Dockerfile для book- и user-service, сервисы и `book-db` в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6) |
 | Событийная шина: выбор брокера | ADR-0001 (RabbitMQ), локальный RabbitMQ в `docker-compose.yml`; реализация — issue #14 |
@@ -155,6 +155,7 @@ smart-library/
 - `user-service/migrations/` — `001_init.sql` в goose-формате + `migrations.go` с `//go:embed`; применяется `pkg/migrate` при старте.
 - `docs/adr/0001-message-broker.md` — решение по брокеру (RabbitMQ), сравнение с Kafka/NATS по критериям issue #7, модель событий: topic exchange `library.events`, routing key = `<aggregate>.<action>`, конверт `{event_id, event_type, occurred_at, payload}`, publisher confirms + ручной ack, отложенная доставка через `x-message-ttl` + `x-dead-letter-exchange`. Реализация — issue #14.
 - `docs/adr/0002-ai-recommendation-architecture.md` — решение по AI-модулю (принято): `ai-service` — тонкий Go-адаптер с контрактом `ai.v1.AiService` (Recommend, IngestBook), n8n RAG остаётся внутренней реализацией, каталог синхронизируется событиями `book.*` (источник истины — Book Service). Вариант C (нативный Go-порт RAG) — задокументированное направление развития. Задачи: #22 (перенос артефактов, готово), #23 (реализация Go-адаптера).
+- `docs/adr/0003-service-discovery.md` — решение по обнаружению сервисов (принято): Kubernetes DNS для продакшена, Docker Compose DNS для локальной разработки. Consul отвергнут из-за избыточной операционной нагрузки.
 - `services/ai-service/rag/` — **работающий** прототип RAG: `db/01-schema.sql` (pgvector: `books`, `book_chunks` как `halfvec(3072)`, HNSW-индекс, функции `match_book_chunks`/`get_book`/`list_books`/`delete_book`), `workflow/book-rag-system.json` (n8n, agentic RAG с 4 инструментами), `scripts/` (start/verify/ingest/eval), `samples/books.csv` (20 книг), `docs/` (ARCHITECTURE/SETUP/USAGE), `evals/` (30-вопросовый набор: taste/self/author/genre/constraint/refuse), `tests/` (pytest: precision@k/recall@k/hit@k/refusal-accuracy). Эмбеддинги — Gemini `models/gemini-embedding-001` (3072 dims), chat-модель изолирована в одном узле. Секреты — только в `.env` (git-ignored), шаблон `.env.example`.
 - `docker-compose.yml` — сервисы + инфраструктура. RabbitMQ (`rabbitmq:4-management`): AMQP `:5672`, management UI `:15672`, healthcheck `rabbitmq-diagnostics -q ping`, volume `rabbitmq-data`; логин/пароль — из `RABBITMQ_USER`/`RABBITMQ_PASS` (по умолчанию `guest`). PostgreSQL для user-service (`postgres:17`, контейнер `library-user-db`, хост-порт `:5432`, volume `user-db-data`): миграции применяются через `pkg/migrate` при старте. PostgreSQL для book-service (`postgres:17`, контейнер `library-book-db`, хост-порт `:5434`, volume `book-db-data`): миграции применяются через `pkg/migrate` при старте, сервис подключается к нему по `BOOK_SERVICE_DB_DSN` и ждёт `condition: service_healthy`. pgvector (`pgvector/pgvector:pg17`, контейнер `library-ai-rag-db`, хост-порт `:5433`, volume `ai-rag-db-data`): init-скрипты монтируются из `services/ai-service/rag/db/`, учётные данные — из `AI_RAG_DB_USER`/`AI_RAG_DB_PASSWORD`/`AI_RAG_DB_NAME` (по умолчанию `bookrag`). Сервисные контейнеры `library-book-service`/`library-user-service` собираются из Dockerfile'ов (контекст — корень репо), публикуют gRPC/REST-порты и проходят healthcheck на `GET /healthz`; `user-service` ждёт `user-db` по `condition: service_healthy`.
 - `services/*/Dockerfile` — multi-stage: `golang:1.27-alpine` (build, `GOWORK=off`, `CGO_ENABLED=0`) → `alpine:3.21` (runtime, non-root uid 10001/10002, `wget` для healthcheck). Контекст сборки — **корень репозитория**, т.к. `go.mod` сервисов содержит `replace ... => ../../pkg`; `.dockerignore` исключает `.git`, `go.work`, артефакты. Точка входа — `./cmd/server`.
@@ -220,6 +221,5 @@ smart-library/
 
 ## Открытые вопросы для уточнения
 
-- Механизм discovery: Consul или Kubernetes DNS (см. issue #8).
 - Определить, какие эндпоинты gateway'я публичные (REST) и какие внутренние (gRPC).
 - Покрыть тестами репозитории против PostgreSQL и интеграционные gRPC-тесты; HTTP-слои user/book закрыты в PR #26/#27.
