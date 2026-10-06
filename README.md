@@ -115,7 +115,7 @@ Smart Library AI является **первоклассным компонен�
 | User Service (proto, domain, security, service, handler, server) | готово, хранилище **PostgreSQL** (argon2id + bearer-токены) |
 | User Service REST + Swagger UI (grpc-gateway, `:8092`) | готово                                                |
 | Миграции User Service (`pkg/migrate`, embed FS)        | готовы, применяются при старте                         |
-| Локальный запуск сервисов                              | `cd services/book-service` (gRPC `:8081`, REST `:8091`) / `cd services/user-service` (gRPC `:8082`, REST `:8092`) |
+| Локальный запуск сервисов                              | `cd services/api-gateway` (HTTP `:8080`) / `cd services/book-service` (gRPC `:8081`, REST `:8091`) / `cd services/user-service` (gRPC `:8082`, REST `:8092`) |
 | Контейнеризация (multi-stage Dockerfile + compose)    | готово — `#6` (PR #39); сервисы + 3 БД + RabbitMQ в `docker-compose.yml`, healthcheck `GET /healthz` |
 | CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book-service идут против сервис-контейнера `postgres:17` |
 | OpenAPI/Swagger из proto-аннотаций                    | готово: `grpc-gateway` генерирует REST-маршруты и `swagger.json` (embed в сервисы) |
@@ -123,7 +123,8 @@ Smart Library AI является **первоклассным компонен�
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | не начато — `#23`; архитектура — ADR-0002              |
-| Loan / Notification Service                            | не начато (задачи не заведены)                         |
+| Loan Service                                           | не начато — `#49`                                      |
+| Notification Service                                   | не начато — `#48`                                      |
 | API Gateway                                            | готово — `#10` (gRPC-аутентификация через user-service, маршрутизация по пути, Dockerfile) |
 | Межсервисные gRPC-клиенты, discovery                  | не начато; User Service отдаёт `AuthenticateToken` для gateway; discovery — `#8` |
 | User Service: техдолг (хранилище и API)                | `#32` (pgx вместо lib/pq), `#33` (pg_trgm + keyset-пагинация), `#34` (rate limiting), `#31` (кэш валидации сессий) |
@@ -211,7 +212,7 @@ smart-library/
 ├── go.work              # воркспейс: ./services/api-gateway, ./services/book-service, ./services/user-service, ./pkg
 ├── README.md            # этот файл
 ├── KODA.md              # контекст репозитория для AI-сессий
-├── docker-compose.yml   # сервисы + БД + RabbitMQ: book/user-service, book-db (:5434), user-db (:5432), pgvector (:5433)
+├── docker-compose.yml   # сервисы + БД + RabbitMQ: api-gateway (:8080), book/user-service, book-db (:5434), user-db (:5432), pgvector (:5433)
 ├── .dockerignore        # исключает .git, go.work, артефакты из контекста сборки
 ├── .github/workflows/   # CI: build + test (ci.yml)
 ├── docs/
@@ -252,8 +253,8 @@ smart-library/
                          # tests/ — 53 offline-теста, .env.example — шаблон переменных
 ```
 
-Сервисы `api-gateway`, `loan-service` и `notification-service` из архитектурной
-таблицы ещё не созданы как директории.
+Сервисы `loan-service` и `notification-service` из архитектурной таблицы ещё не
+созданы как директории — заведены задачи `#49` и `#48` соответственно.
 
 Для локальной разработки нескольких модулей одновременно используется Go-воркспейс
 (`go.work`).
