@@ -7,7 +7,9 @@ import (
 	"os"
 )
 
-// getSecret возвращает секрет для проверки подписи JWT из переменной окружения.
+// getSecret reads the shared secret the tokens are signed with from the
+// environment. The fallback only exists so a development setup starts without
+// extra configuration; a deployment has to set SHARE_SECRET.
 func getSecret() []byte {
 	s := os.Getenv("SHARE_SECRET")
 	if s == "" {
@@ -17,7 +19,9 @@ func getSecret() []byte {
 	return []byte(s)
 }
 
-// verifyHMAC проверяет HMAC-SHA256 подпись токена.
+// verifyHMAC reports whether signature is the HMAC-SHA256 of signingInput.
+// The comparison is the constant time one from crypto/hmac: a byte by byte
+// comparison would leak the position of the first wrong character.
 func verifyHMAC(signingInput, signature string, secret []byte) bool {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(signingInput))
@@ -26,7 +30,8 @@ func verifyHMAC(signingInput, signature string, secret []byte) bool {
 	return hmac.Equal([]byte(expected), []byte(signature))
 }
 
-// base64URLDecode декодирует base64url-строку (без padding).
+// base64URLDecode decodes a base64url string without padding, the encoding the
+// segments of a JWT use.
 func base64URLDecode(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(s)
 }

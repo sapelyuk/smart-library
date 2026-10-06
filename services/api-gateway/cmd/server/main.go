@@ -1,9 +1,13 @@
-// Command server запускает API Gateway — единый HTTP-вход для клиентских приложений.
+// Command server starts the API gateway: the single HTTP entry point in front of
+// the services.
 //
-// Шлюз принимает HTTP/JSON-запросы, проверяет JWT-токен и маршрутизирует вызовы
-// к book-service и user-service через grpc-gateway (HTTP-эндпоинты сервисов).
+// A request arrives as HTTP/JSON, is authenticated by its bearer token and is
+// forwarded to the REST surface of book-service or user-service, chosen by the
+// prefix of its path. Clients therefore address one host instead of learning the
+// address of every service.
 //
-// Конфигурация — только переменные окружения (см. godoc пакета main).
+// Every value comes from the environment, so the binary is configured the same way
+// in a shell, in a compose file and in a deployment manifest.
 package main
 
 import (
@@ -24,17 +28,18 @@ import (
 	"github.com/sapelyuk/smart-library/services/api-gateway/internal/proxy"
 )
 
-// config — конфигурация шлюза, только из переменных окружения.
+// config is the configuration of the gateway, read entirely from the environment.
 type config struct {
-	httpAddr        string        // HTTP_ADDR — адрес HTTP-шлюза (по умолчанию ":8080")
-	bookServiceURL  string        // BOOK_SERVICE_URL — HTTP-адрес book-service (grpc-gateway)
-	userServiceURL  string        // USER_SERVICE_URL — HTTP-адрес user-service (grpc-gateway)
-	shutdownTimeout time.Duration // SHUTDOWN_TIMEOUT — время на graceful shutdown
-	logLevel        string        // LOG_LEVEL — debug|info|warn|error
-	logFormat       string        // LOG_FORMAT — json|text
+	httpAddr        string        // HTTP_ADDR: address the gateway listens on, ":8080" by default
+	bookServiceURL  string        // BOOK_SERVICE_URL: REST address of book-service
+	userServiceURL  string        // USER_SERVICE_URL: REST address of user-service
+	shutdownTimeout time.Duration // SHUTDOWN_TIMEOUT: budget for the graceful shutdown
+	logLevel        string        // LOG_LEVEL: debug|info|warn|error
+	logFormat       string        // LOG_FORMAT: json|text
 }
 
-// loadConfig читает конфигурацию из переменных окружения.
+// loadConfig reads the configuration and refuses to start with a half of the
+// backends unknown: a missing address would only surface as 502 responses later.
 func loadConfig() (config, error) {
 	cfg := config{
 		httpAddr:        getenv("HTTP_ADDR", ":8080"),
@@ -108,7 +113,7 @@ func run(cfg config, log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Разбираем URL бэкендов.
+	// The addresses of the backends are parsed once, so a typo fails the startup.
 	bookURL, err := url.Parse(cfg.bookServiceURL)
 	if err != nil {
 		return fmt.Errorf("invalid BOOK_SERVICE_URL: %w", err)
@@ -119,11 +124,10 @@ func run(cfg config, log *slog.Logger) error {
 		return fmt.Errorf("invalid USER_SERVICE_URL: %w", err)
 	}
 
-	// Создаём прокси.
 	bookProxy := proxy.New(bookURL, log)
 	userProxy := proxy.New(userURL, log)
 
-	// Маршрутизатор без авторизации — только публичные пути.
+	// The routes that answer without a session.
 	publicMux := http.NewServeMux()
 	publicMux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -131,40 +135,42 @@ func run(cfg config, log *slog.Logger) error {
 		fmt.Fprint(w, `{"status":"ok"}`)
 	})
 
-	// Публичные пути аутентификации (login, register) — без JWT.
+	// Signing in and signing up are how a caller obtains a token, so they cannot
+	// require one.
 	publicMux.Handle("/v1/auth/login", userProxy.Handler())
 	publicMux.Handle("/v1/auth/register", userProxy.Handler())
 
-	// Маршрутизатор с авторизацией.
+	// Everything else is forwarded only after the token has been checked.
 	privateMux := http.NewServeMux()
 
-	// user-service: все остальные /v1/users/ и /v1/auth/ (me, change-password).
+	// Accounts and sessions belong to user-service, including the routes that
+	// change a password and end the current session.
 	privateMux.Handle("/v1/users/", userProxy.Handler())
 	privateMux.Handle("/v1/auth/", userProxy.Handler())
 
-	// book-service: каталог книг и выдача.
+	// The catalog and the copy inventory belong to book-service.
 	privateMux.Handle("/v1/books/", bookProxy.Handler())
 	privateMux.Handle("/v1/borrow/", bookProxy.Handler())
 
-	// Создаём аутентификатор.
 	authenticator := auth.NewAuthenticator()
 
-	// Оборачиваем маршрутизаторы в middleware.
-	// Сначала проверяем публичные пути, затем приватные через authenticator.
+	// The two routers are picked apart by path: the public paths go through as
+	// they are, the rest is wrapped in the token check.
 	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// Health check и публичные пути — без авторизации.
 		if path == "/healthz" || path == "/v1/auth/login" || path == "/v1/auth/register" {
 			publicMux.ServeHTTP(w, r)
 
 			return
 		}
 
-		// Остальные пути — через аутентификатор.
 		authenticator.Middleware(privateMux).ServeHTTP(w, r)
 	})
 
+	// The timeouts are set on purpose: a gateway that waits forever for a client
+	// that stopped reading holds a connection per request, which is the cheapest
+	// way to run out of file descriptors.
 	srv := &http.Server{
 		Addr:              cfg.httpAddr,
 		Handler:           combinedHandler,

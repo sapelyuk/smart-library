@@ -1,18 +1,19 @@
-// Package auth предоставляет middleware аутентификации и авторизации для API Gateway.
+// Package auth provides the authentication and authorization middleware of the
+// API gateway.
 //
-// Gateway проверяет JWT-токен из заголовка Authorization и извлекает user_id и role.
-// Для публичных эндпоинтов (login, register) проверка пропускается.
+// Every request that is not explicitly public has to carry a bearer token in the
+// Authorization header. The token is verified once, at the edge, and the identity
+// it resolves to is put on the request context, so the handlers and the role
+// checks downstream read it instead of parsing the token again.
 //
-// Авторизация на уровне ролей выполняется через проверку роли из токена:
-//   - admin: полный доступ (ADMIN в user-service)
-//   - librarian: управление каталогом и пользователями (LIBRARIAN в user-service)
-//   - reader: чтение каталога, создание borrow/return (READER в user-service)
+// The roles are the ones user-service issues:
+//   - READER: reads the catalog, borrows and returns copies
+//   - LIBRARIAN: manages the catalog and the accounts of readers
+//   - ADMIN: full access
 package auth
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,7 +21,7 @@ import (
 	"time"
 )
 
-// Role — роль пользователя в системе.
+// Role is the privilege level of an authenticated caller.
 type Role string
 
 const (
@@ -29,7 +30,7 @@ const (
 	RoleAdmin     Role = "ADMIN"
 )
 
-// Claims — JWT claims для токенов, выдаваемых user-service.
+// Claims is the set of assertions the gateway trusts once a token verifies.
 type Claims struct {
 	UserID string `json:"sub"`
 	Role   string `json:"role"`
@@ -38,7 +39,7 @@ type Claims struct {
 	Exp    int64  `json:"exp"`
 }
 
-// Valid проверяет срок действия токена.
+// Valid reports whether the token is still within its lifetime.
 func (c *Claims) Valid() error {
 	if c.Exp == 0 {
 		return fmt.Errorf("auth: token has no expiration")
@@ -51,43 +52,43 @@ func (c *Claims) Valid() error {
 	return nil
 }
 
-// contextKey — тип для ключей в context, чтобы избежать коллизий.
+// contextKey is a private type for the context keys of this package, so a key
+// defined elsewhere can never collide with one of ours.
 type contextKey string
 
 const claimsKey contextKey = "gateway-claims"
 
-// ClaimsFromContext возвращает Claims из контекста запроса.
+// ClaimsFromContext returns the caller resolved by the middleware, if any.
 func ClaimsFromContext(ctx context.Context) (*Claims, bool) {
 	c, ok := ctx.Value(claimsKey).(*Claims)
 
 	return c, ok
 }
 
-// Authenticator — middleware, который проверяет JWT-токен и добавляет Claims в контекст.
-//
-// Для публичных путей (login, register) проверка пропускается.
-// Для остальных путей требуется валидный Bearer-токен.
+// Authenticator rejects a request whose bearer token is missing, malformed, badly
+// signed or expired, and otherwise puts the resolved Claims on the context of the
+// request it forwards.
 type Authenticator struct {
 	publicPaths map[string]bool
 }
 
-// NewAuthenticator создаёт Authenticator со списком публичных путей.
-// Пути указываются без метода HTTP, только path (например, "/v1/auth/login").
+// NewAuthenticator builds an Authenticator for the given public paths. Paths are
+// matched without the HTTP method, for example "/v1/auth/login".
 func NewAuthenticator(publicPaths ...string) *Authenticator {
 	m := make(map[string]bool, len(publicPaths))
 	for _, p := range publicPaths {
 		m[p] = true
 	}
-	// Swagger UI доступен без авторизации.
+	// The documentation shell has to stay reachable without a session.
 	m["/swagger/"] = true
 
 	return &Authenticator{publicPaths: m}
 }
 
-// Middleware возвращает http.Handler с проверкой JWT.
+// Middleware wraps next with the token check.
 func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Пропускаем публичные пути.
+		// Public paths are forwarded untouched.
 		path := strings.TrimRight(r.URL.Path, "/")
 		if a.publicPaths[path] || a.publicPaths[r.URL.Path] {
 			next.ServeHTTP(w, r)
@@ -95,7 +96,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Извлекаем Bearer-токен.
+		// Everything else has to present a bearer credential.
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			http.Error(w, `{"code":16,"message":"missing authorization header"}`, http.StatusUnauthorized)
@@ -120,13 +121,16 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Добавляем Claims в контекст.
+		// Carry the resolved caller into the handler.
 		ctx := context.WithValue(r.Context(), claimsKey, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// RequireRole — middleware, требующий определённую роль.
+// RequireRole returns a middleware that only lets callers with one of the listed
+// roles through. It has to be mounted behind an Authenticator: with no claims to
+// check it answers 401 rather than 403, so a missing session is not reported as a
+// permission problem.
 func RequireRole(allowed ...Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -151,14 +155,10 @@ func RequireRole(allowed ...Role) func(http.Handler) http.Handler {
 	}
 }
 
-// GenerateKeyPair создаёт новую пару ключей Ed25519.
-// Используется при тестировании или первичной генерации ключей.
-func GenerateKeyPair() (ed25519.PublicKey, ed25519.PrivateKey, error) {
-	return ed25519.GenerateKey(rand.Reader)
-}
-
-// ParseToken разбирает и валидирует JWT-токен.
-// В MVP используется HMAC-SHA256 с общим секретом (SHARE_SECRET из ENV).
+// ParseToken verifies the signature of a token and decodes its claims.
+//
+// The signature is HMAC-SHA256 over "header.payload" with the shared secret from
+// the environment, which is the same secret the issuer of the token signs with.
 func ParseToken(tokenStr string) (*Claims, error) {
 	secret := getSecret()
 
@@ -167,13 +167,12 @@ func ParseToken(tokenStr string) (*Claims, error) {
 		return nil, fmt.Errorf("invalid token format")
 	}
 
-	// Проверяем подпись HMAC.
+	// Reject a foreign or tampered token before looking at what it claims.
 	signingInput := parts[0] + "." + parts[1]
 	if !verifyHMAC(signingInput, parts[2], secret) {
 		return nil, fmt.Errorf("invalid token signature")
 	}
 
-	// Декодируем payload.
 	payload, err := base64URLDecode(parts[1])
 	if err != nil {
 		return nil, fmt.Errorf("invalid token payload: %w", err)
