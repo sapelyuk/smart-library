@@ -2,10 +2,10 @@
 
 ## Обзор проекта
 
-**Smart Library** — полнофункциональная платформа управления библиотекой: монорепо с бэкендом на Go (gRPC-микросервисы), планируемым React-приложением и AI-рекомендациями книг на LLM/RAG. Реализовано: **Book Service полностью рабочий** (gRPC-API, REST и Swagger через grpc-gateway, домен, бизнес-логика, PostgreSQL-хранилище, тесты), **User Service рабочий** (gRPC-API, REST и Swagger, регистрация/вход, хеширование паролей, сессии, ролевая модель, PostgreSQL-хранилище, миграции, unit-тесты домена и security), **RAG-прототип AI-модуля работает** (n8n + pgvector + Gemini, 20 книг проиндексировано), плюс общий модуль `pkg` (logger, config). Остальные сервисы существуют только как строки в архитектурной таблице.
+**Smart Library** — полнофункциональная платформа управления библиотекой: монорепо с бэкендом на Go (gRPC-микросервисы), планируемым React-приложением и AI-рекомендациями книг на LLM/RAG. Реализовано: **Book Service полностью рабочий** (gRPC-API, REST и Swagger через grpc-gateway, домен, бизнес-логика, PostgreSQL-хранилище, тесты), **User Service рабочий** (gRPC-API, REST и Swagger, регистрация/вход, хеширование паролей, сессии, ролевая модель, PostgreSQL-хранилище, миграции, unit-тесты домена и security), **API Gateway рабочий** (единая HTTP-точка входа, маршрутизация к сервисам, gRPC-аутентификация через user-service), **RAG-прототип AI-модуля работает** (n8n + pgvector + Gemini, 20 книг проиндексировано), плюс общий модуль `pkg` (logger, config, migrate). Остальные сервисы (Loan, Notification, Go-адаптер AI) существуют только как строки в архитектурной таблице и заведённые задачи.
 
 - **Назначение:** каталог книг, учёт читателей и библиотекарей, выдача/возврат книг, уведомления о сроках возврата, единая точка входа для клиентов.
-- **Язык и стек:** Go (локально установлен `go1.27.1 windows/amd64`), gRPC, protobuf, `log/slog`, PostgreSQL (`pgx/v5` в book-service, `database/sql` + `lib/pq` в user-service); брокер выбран — RabbitMQ (ADR-0001), discovery Consul/Kubernetes — в планах; фронтенд — React (в плане); AI-модуль — LLM/RAG (прототип работает, Go-адаптер в плане).
+- **Язык и стек:** Go (локально установлен `go1.27.1 windows/amd64`), gRPC, protobuf, `log/slog`, PostgreSQL (`pgx/v5` в book-service, `database/sql` + `lib/pq` в user-service); брокер выбран — RabbitMQ (ADR-0001), discovery — Kubernetes DNS (ADR-0003); фронтенд — React (в плане); AI-модуль — LLM/RAG (прототип работает, Go-адаптер в плане).
 - **Архитектурный стиль:** микросервисы с изолированным хранилищем на каждый сервис (паттерн *database-per-service*).
 - **Организация кода:** монорепо с Go-воркспейсом (`go.work`) для локальной разработки нескольких модулей одновременно.
 
@@ -24,18 +24,18 @@
 
 - **Синхронная коммуникация:** gRPC между сервисами (быстро, типизированно).
 - **Асинхронная коммуникация:** RabbitMQ (topic exchange `library.events`, отложенная доставка через TTL+DLX для напоминаний о сроках возврата).
-- **Обнаружение сервисов:** Consul либо Kubernetes DNS.
+- **Обнаружение сервисов:** Kubernetes DNS (продакшен) / Docker Compose DNS (локально), ADR-0003.
 - **Хранилище:** отдельная база PostgreSQL на каждый сервис.
 
 ## План развития
 
 | Этап | Что реализовано | Статус |
 | --- | --- | --- |
-| Бэкенд-сервисы | Book Service, User Service, RabbitMQ | ✅ готово |
+| Бэкенд-сервисы | Book Service, User Service, API Gateway, RabbitMQ | ✅ готово |
 | Фронтенд | React SPA, потребляющая REST-контракты сервисов | 🔜 в плане |
 | AI-модуль | AI Service: ADR-0002 + RAG-прототип (n8n + pgvector + Gemini) | 🟡 прототип работает (#22), Go-адаптер — #23 |
 | Discovery | Kubernetes DNS (Docker Compose DNS локально) | 📋 ADR-0003 принято |
-| CI/CD | GitHub Actions (CI: build + test) | 🟡 CI готов (PR #28); контейнеризация — в плане |
+| CI/CD | GitHub Actions (CI: build + test), контейнеризация | 🟡 CI готов (PR #28), контейнеризация готова (#6); CD — в плане |
 
 **Приоритет:** фронтенд → AI-модуль → discovery → CI/CD.
 
@@ -46,7 +46,7 @@ smart-library/
 ├── go.work                      # воркспейс: ./pkg, ./services/api-gateway, ./services/book-service, ./services/user-service
 ├── README.md                    # архитектурная спецификация проекта
 ├── KODA.md                      # этот файл
-├── docker-compose.yml           # сервисы + БД + RabbitMQ: book/user-service, book-db (:5434), user-db (:5432), pgvector (:5433)
+├── docker-compose.yml           # сервисы + БД + RabbitMQ: api-gateway (:8080), book/user-service, book-db (:5434), user-db (:5432), pgvector (:5433)
 ├── .dockerignore                # исключает .git, go.work, артефакты из контекста сборки
 ├── .github/workflows/ci.yml     # CI: build + test (четыре модуля, coverage в step summary)
 ├── docs/adr/
