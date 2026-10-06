@@ -36,7 +36,7 @@ Book Service дополнительно поднимает HTTP-слой для 
   выбор зафиксирован в `docs/adr/0001-message-broker.md`: topic exchange
   `library.events`, routing key = тип события, publisher confirms + ручной ack,
   отложенные доставки через TTL + dead-letter exchange
-- Обнаружение сервисов: Consul или Kubernetes DNS
+- Обнаружение сервисов: DNS (Docker Compose локально, Kubernetes DNS в продакшене)
 - Хранилище: отдельный PostgreSQL на каждый сервис (паттерн database-per-service)
 
 ## AI-first подход
@@ -105,6 +105,7 @@ Smart Library AI является **первоклассным компонен�
 | CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book-service идут против сервис-контейнера `postgres:17` |
 | OpenAPI/Swagger из proto-аннотаций                    | готово: `grpc-gateway` генерирует REST-маршруты и `swagger.json` (embed в сервисы) |
 | Брокер сообщений: выбор и локальная инфраструктура    | готово: ADR-0001 (RabbitMQ), `docker-compose.yml`; реализация продюсеров/консьюмеров — `#14` |
+| Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | не начато — `#23`; архитектура — ADR-0002              |
 | Loan / Notification Service                            | не начато (задачи не заведены)                         |
@@ -188,7 +189,8 @@ smart-library/
 ├── docs/
 │   ├── adr/
 │   │   ├── 0001-message-broker.md  # решение по брокеру сообщений
-│   │   └── 0002-ai-recommendation-architecture.md  # архитектура AI-сервиса
+│   │   ├── 0002-ai-recommendation-architecture.md  # архитектура AI-сервиса
+│   │   └── 0003-service-discovery.md  # механизм обнаружения сервисов
 │   └── ai-first-principles.md  # принципы AI-first подхода
 ├── scripts/
 │   └── gen_proto.ps1    # кодогенерация protoc + go/go-grpc/grpc-gateway/openapiv2
