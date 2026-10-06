@@ -43,12 +43,12 @@
 
 ```
 smart-library/
-├── go.work                      # воркспейс: ./pkg, ./services/book-service, ./services/user-service
+├── go.work                      # воркспейс: ./pkg, ./services/api-gateway, ./services/book-service, ./services/user-service
 ├── README.md                    # архитектурная спецификация проекта
 ├── KODA.md                      # этот файл
 ├── docker-compose.yml           # сервисы + БД + RabbitMQ: book/user-service, book-db (:5434), user-db (:5432), pgvector (:5433)
 ├── .dockerignore                # исключает .git, go.work, артефакты из контекста сборки
-├── .github/workflows/ci.yml     # CI: build + test (три модуля, coverage в step summary)
+├── .github/workflows/ci.yml     # CI: build + test (четыре модуля, coverage в step summary)
 ├── docs/adr/
 │   ├── 0001-message-broker.md   # ADR: выбор RabbitMQ, модель событий, гарантии доставки
 │   └── 0002-ai-recommendation-architecture.md  # ADR: AI Service поверх n8n RAG, вариант C как развитие
@@ -62,6 +62,11 @@ smart-library/
 │   ├── logger/logger.go         # slog: json|text, debug..error, MustNew
 │   └── migrate/migrate.go       # SQL-миграции: таблица schema_migrations, checksum, Apply
 └── services/
+    ├── api-gateway/             # модуль github.com/sapelyuk/smart-library/services/api-gateway
+    │   ├── cmd/server/main.go   # GATEWAY_* env, gRPC-аутентификация через user-service, HTTP :8080
+    │   ├── internal/auth/       # Verifier (gRPC AuthenticateToken), Authenticator, RequireRole + тесты
+    │   ├── internal/proxy/      # httputil.ReverseProxy: маршрутизация к book/user-service
+    │   └── Dockerfile           # multi-stage образ, контекст сборки — корень репозитория
     ├── book-service/            # модуль github.com/sapelyuk/smart-library/services/book-service
     │   ├── README.md            # документация сервиса: API, env, grpcurl/curl-примеры
     │   ├── Dockerfile           # multi-stage образ, контекст сборки — корень репозитория
@@ -108,7 +113,7 @@ smart-library/
             └── docs/            # документация прототипа (ARCHITECTURE/SETUP/USAGE)
 ```
 
-`loan-service`, `notification-service` и `api-gateway` на диске **отсутствуют** — это следующая работа. Go-модуль `services/ai-service` ещё не создан (задача #23), но в `rag/` лежит **рабочий** RAG-прототип (без Go-кода): pgvector, схема, n8n workflow, проиндексировано 20 книг, плюс **eval-набор** (`evals/` + `scripts/eval-rag.ps1` + `tests/`) — офлайн-валидация: `powershell -File scripts/eval-rag.ps1 -ValidateOnly`.
+Go-модули `services/loan-service` и `services/notification-service` на диске **отсутствуют** — заведены задачи #49 (Loan) и #48 (Notification). Go-модуль `services/ai-service` ещё не создан (задача #23), но в `rag/` лежит **рабочий** RAG-прототип (без Go-кода): pgvector, схема, n8n workflow, проиндексировано 20 книг, плюс **eval-набор** (`evals/` + `scripts/eval-rag.ps1` + `tests/`) — офлайн-валидация: `powershell -File scripts/eval-rag.ps1 -ValidateOnly`.
 
 ## Статус реализации
 
@@ -126,7 +131,8 @@ smart-library/
 | Хранилище User Service | PostgreSQL 17 в Docker (`database/sql` + `lib/pq`), миграции при старте |
 | Тесты User Service | домен, security (PR #11) и HTTP-слой (PR #26) — готово; сервис и репозиторий — нет |
 | API Gateway | **готово** (issue #10): reverse-proxy с gRPC-аутентификацией через user-service, маршрутизация по пути, `GATEWAY_*` env vars |
-| Loan Service, Notification Service | нет, задачи не заведены |
+| Loan Service | не начато; заведена задача #49 (жизненный цикл выдачи, события `loan.*`) |
+| Notification Service | не начато; заведена задача #48 (напоминания о сроках, консьюмер `loan.*`) |
 | gRPC-клиенты между сервисами, события, discovery | discovery: ADR-0003 принято (Kubernetes DNS); брокер: ADR-0001 (RabbitMQ); реализация — #14 |
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28) |
 | Контейнеризация | готово: multi-stage Dockerfile для book- и user-service, сервисы и `book-db` в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6) |

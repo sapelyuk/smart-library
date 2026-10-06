@@ -123,7 +123,8 @@ Smart Library AI является **первоклассным компонен�
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | не начато — `#23`; архитектура — ADR-0002              |
-| Loan / Notification Service                            | не начато (задачи не заведены)                         |
+| Loan Service                                           | не начато — `#49`                                      |
+| Notification Service                                   | не начато — `#48`                                      |
 | API Gateway                                            | готово — `#10` (gRPC-аутентификация через user-service, маршрутизация по пути, Dockerfile) |
 | Межсервисные gRPC-клиенты, discovery                  | не начато; User Service отдаёт `AuthenticateToken` для gateway; discovery — `#8` |
 | User Service: техдолг (хранилище и API)                | `#32` (pgx вместо lib/pq), `#33` (pg_trgm + keyset-пагинация), `#34` (rate limiting), `#31` (кэш валидации сессий) |
@@ -252,8 +253,8 @@ smart-library/
                          # tests/ — 53 offline-теста, .env.example — шаблон переменных
 ```
 
-Сервисы `api-gateway`, `loan-service` и `notification-service` из архитектурной
-таблицы ещё не созданы как директории.
+Сервисы `loan-service` и `notification-service` из архитектурной таблицы ещё не
+созданы как директории — заведены задачи `#49` и `#48` соответственно.
 
 Для локальной разработки нескольких модулей одновременно используется Go-воркспейс
 (`go.work`).
