@@ -1,0 +1,1097 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "API Gateway",
+    "description": "Single HTTP entry point for the Smart Library platform. Routes requests to Book Service and User Service over gRPC. Authentication is handled via Bearer token; role-based access control restricts librarian operations.",
+    "version": "1.0",
+    "contact": {
+      "name": "Smart Library"
+    }
+  },
+  "tags": [
+    {
+      "name": "GatewayService",
+      "description": "GatewayService aggregates the REST API of book-service and user-service\nbehind a single HTTP endpoint (:8080). Every RPC delegates to the\ncorresponding backend gRPC client after authentication and authorization.\n\n---- user-service: public ----"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/auth/login": {
+      "post": {
+        "operationId": "GatewayService_Login",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Session"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1LoginRequest"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "operationId": "GatewayService_Logout",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/auth/register": {
+      "post": {
+        "operationId": "GatewayService_Register",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "Self service registration, the role is always ROLE_READER.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RegisterRequest"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/books": {
+      "get": {
+        "operationId": "GatewayService_ListBooks",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListBooksResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "query",
+            "description": "Free text filter matched against title, author and ISBN.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "limit",
+            "description": "Page size, 0 means the service default (20), capped at 100.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "offset",
+            "description": "Number of entries to skip.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      },
+      "post": {
+        "operationId": "GatewayService_CreateBook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Book"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateBookRequest"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/books/{bookId}/borrow": {
+      "post": {
+        "operationId": "GatewayService_BorrowBookCopy",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1BookCopy"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "bookId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/GatewayServiceBorrowBookCopyBody"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/books/{bookId}/copies": {
+      "get": {
+        "operationId": "GatewayService_ListBookCopies",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListBookCopiesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "bookId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      },
+      "post": {
+        "operationId": "GatewayService_AddBookCopy",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1BookCopy"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "bookId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/GatewayServiceAddBookCopyBody"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/books/{id}": {
+      "get": {
+        "operationId": "GatewayService_GetBook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Book"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      },
+      "delete": {
+        "operationId": "GatewayService_DeleteBook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      },
+      "patch": {
+        "operationId": "GatewayService_UpdateBook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Book"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/GatewayServiceUpdateBookBody"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/copies/{copyId}/return": {
+      "post": {
+        "operationId": "GatewayService_ReturnBookCopy",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1BookCopy"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "copyId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/GatewayServiceReturnBookCopyBody"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/users": {
+      "get": {
+        "operationId": "GatewayService_ListUsers",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListUsersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "query",
+            "description": "Free text filter matched against full name, email and phone.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "role",
+            "description": "Restrict the answer to one role, UNSPECIFIED means every role.\n\n - ROLE_READER: Reader: borrows books, manages only own account.\n - ROLE_LIBRARIAN: Librarian: manages the catalog and the accounts of readers.",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "ROLE_UNSPECIFIED",
+              "ROLE_READER",
+              "ROLE_LIBRARIAN"
+            ],
+            "default": "ROLE_UNSPECIFIED"
+          },
+          {
+            "name": "status",
+            "description": "Restrict the answer to one status, UNSPECIFIED means every status.\n\n - USER_STATUS_ACTIVE: The account may sign in.\n - USER_STATUS_DEACTIVATED: Blocked by a librarian: signing in is refused, the data is kept.",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "USER_STATUS_UNSPECIFIED",
+              "USER_STATUS_ACTIVE",
+              "USER_STATUS_DEACTIVATED"
+            ],
+            "default": "USER_STATUS_UNSPECIFIED"
+          },
+          {
+            "name": "limit",
+            "description": "Page size, 0 means the service default (20), capped at 100.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "offset",
+            "description": "Number of entries to skip.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      },
+      "post": {
+        "operationId": "GatewayService_CreateUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "Account created by a librarian, the role is chosen explicitly.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateUserRequest"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/users/me": {
+      "get": {
+        "operationId": "GatewayService_GetCurrentUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/users/{id}": {
+      "get": {
+        "operationId": "GatewayService_GetUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      },
+      "patch": {
+        "operationId": "GatewayService_UpdateUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/GatewayServiceUpdateUserBody"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/users/{id}/deactivate": {
+      "post": {
+        "operationId": "GatewayService_DeactivateUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/users/{id}/password": {
+      "post": {
+        "operationId": "GatewayService_ChangePassword",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/GatewayServiceChangePasswordBody"
+            }
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    },
+    "/v1/users/{id}/restore": {
+      "post": {
+        "operationId": "GatewayService_RestoreUser",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1User"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "GatewayService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "GatewayServiceAddBookCopyBody": {
+      "type": "object",
+      "properties": {
+        "barcode": {
+          "type": "string"
+        }
+      }
+    },
+    "GatewayServiceBorrowBookCopyBody": {
+      "type": "object",
+      "description": "Marks the first available copy of the book as ON_LOAN."
+    },
+    "GatewayServiceChangePasswordBody": {
+      "type": "object",
+      "properties": {
+        "currentPassword": {
+          "type": "string"
+        },
+        "newPassword": {
+          "type": "string"
+        }
+      },
+      "description": "Replaces the password of an account. The owner has to prove the current\npassword, a librarian may set a new one without it."
+    },
+    "GatewayServiceReturnBookCopyBody": {
+      "type": "object"
+    },
+    "GatewayServiceUpdateBookBody": {
+      "type": "object",
+      "properties": {
+        "isbn": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "publishedYear": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "Only the fields present in the request are updated."
+    },
+    "GatewayServiceUpdateUserBody": {
+      "type": "object",
+      "properties": {
+        "fullName": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/v1Role"
+        },
+        "status": {
+          "$ref": "#/definitions/v1UserStatus"
+        }
+      },
+      "description": "Only the fields present in the request are updated. A reader may change own\nfull name and phone; changing the email, the role or the status needs a\nlibrarian."
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1Book": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "isbn": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "publishedYear": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "totalCopies": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "availableCopies": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "Catalog entry describing a book edition."
+    },
+    "v1BookCopy": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "bookId": {
+          "type": "string"
+        },
+        "barcode": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/v1CopyStatus"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "Physical copy of a book identified by barcode."
+    },
+    "v1CopyStatus": {
+      "type": "string",
+      "enum": [
+        "COPY_STATUS_UNSPECIFIED",
+        "COPY_STATUS_AVAILABLE",
+        "COPY_STATUS_ON_LOAN",
+        "COPY_STATUS_LOST",
+        "COPY_STATUS_MAINTENANCE"
+      ],
+      "default": "COPY_STATUS_UNSPECIFIED",
+      "description": "Status of a single physical copy of a book."
+    },
+    "v1CreateBookRequest": {
+      "type": "object",
+      "properties": {
+        "isbn": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "publishedYear": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1CreateUserRequest": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "fullName": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/v1Role"
+        }
+      },
+      "description": "Account created by a librarian, the role is chosen explicitly."
+    },
+    "v1ListBookCopiesResponse": {
+      "type": "object",
+      "properties": {
+        "copies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1BookCopy"
+          }
+        }
+      }
+    },
+    "v1ListBooksResponse": {
+      "type": "object",
+      "properties": {
+        "books": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Book"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1ListUsersResponse": {
+      "type": "object",
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1User"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1LoginRequest": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        }
+      }
+    },
+    "v1RegisterRequest": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "fullName": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        }
+      },
+      "description": "Self service registration, the role is always ROLE_READER."
+    },
+    "v1Role": {
+      "type": "string",
+      "enum": [
+        "ROLE_UNSPECIFIED",
+        "ROLE_READER",
+        "ROLE_LIBRARIAN"
+      ],
+      "default": "ROLE_UNSPECIFIED",
+      "description": "Role of a user, ordered by growing privileges.\n\n - ROLE_READER: Reader: borrows books, manages only own account.\n - ROLE_LIBRARIAN: Librarian: manages the catalog and the accounts of readers."
+    },
+    "v1Session": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "accessToken": {
+          "type": "string",
+          "description": "Bearer token, send it as 'authorization: Bearer \u003ctoken\u003e'."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "Session opened by Login. The token is returned once and stored as a hash."
+    },
+    "v1User": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "fullName": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/v1Role"
+        },
+        "status": {
+          "$ref": "#/definitions/v1UserStatus"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last successful sign in, absent while the account never signed in."
+        }
+      },
+      "description": "Account of a reader or a librarian. A password is never returned."
+    },
+    "v1UserStatus": {
+      "type": "string",
+      "enum": [
+        "USER_STATUS_UNSPECIFIED",
+        "USER_STATUS_ACTIVE",
+        "USER_STATUS_DEACTIVATED"
+      ],
+      "default": "USER_STATUS_UNSPECIFIED",
+      "description": "Lifecycle state of an account.\n\n - USER_STATUS_ACTIVE: The account may sign in.\n - USER_STATUS_DEACTIVATED: Blocked by a librarian: signing in is refused, the data is kept."
+    }
+  },
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "description": "Session token returned by Login, sent as 'Bearer \u003ctoken\u003e'.",
+      "name": "authorization",
+      "in": "header"
+    }
+  }
+}

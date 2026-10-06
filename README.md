@@ -30,6 +30,21 @@ Book Service дополнительно поднимает HTTP-слой для 
 плюс Swagger UI по адресу `http://localhost:8091/swagger/`. User Service повторяет
 это на **8082** (gRPC) / **8092** (REST + Swagger).
 
+**API Gateway** — единая HTTP-точка входа для клиентских приложений. Клиент не знает
+адресов отдельных микросервисов: все запросы идут на `:8080`, а шлюз маршрутизирует
+их по префиксу пути:
+
+| Префикс URL       | Сервис         | Порт HTTP (REST) |
+|-------------------|----------------|------------------|
+| `/v1/books/*`     | book-service   | 8091             |
+| `/v1/borrow/*`    | book-service   | 8091             |
+| `/v1/users/*`     | user-service   | 8092             |
+| `/v1/auth/*`      | user-service   | 8092             |
+
+Шлюз проверяет bearer-токен через gRPC `AuthenticateToken` user-service и
+добавляет заголовок `X-Forwarded-For`. Локально запускается через
+`docker compose up -d api-gateway`.
+
 ## Паттерны взаимодействия:
 - Синхронно: gRPC между сервисами (быстро, типизированно)
 - Асинхронно: **RabbitMQ** для событий (`book.borrowed`, `loan.overdue`) —
@@ -109,7 +124,7 @@ Smart Library AI является **первоклассным компонен�
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | не начато — `#23`; архитектура — ADR-0002              |
 | Loan / Notification Service                            | не начато (задачи не заведены)                         |
-| API Gateway                                            | не начато — `#10`                                     |
+| API Gateway                                            | готово — `#10` (gRPC-аутентификация через user-service, маршрутизация по пути, Dockerfile) |
 | Межсервисные gRPC-клиенты, discovery                  | не начато; User Service отдаёт `AuthenticateToken` для gateway; discovery — `#8` |
 | User Service: техдолг (хранилище и API)                | `#32` (pgx вместо lib/pq), `#33` (pg_trgm + keyset-пагинация), `#34` (rate limiting), `#31` (кэш валидации сессий) |
 
@@ -147,7 +162,7 @@ go build ./... && go vet ./... && go test ./...
 Полный стек одной командой (сборка образов сервисов + инфраструктура):
 
 ```bash
-docker compose up -d --build    # сервисы :8081/:8091 и :8082/:8092 + БД + RabbitMQ
+docker compose up -d --build    # сервисы :8080/:8081/:8091/:8082/:8092 + БД + RabbitMQ
 docker compose logs -f book-service
 docker compose down -v          # остановить и удалить volume
 ```
@@ -156,6 +171,7 @@ docker compose down -v          # остановить и удалить volume
 
 | Сервис (compose-ключ) | Образ | Порты хоста |
 | --- | --- | --- |
+| `api-gateway` | build `services/api-gateway/Dockerfile` | `8080` (REST-маршрутизация, gRPC-аутентификация, `/healthz`) |
 | `book-service` | build `services/book-service/Dockerfile` | `8081` (gRPC), `8091` (REST + Swagger + `/healthz`) |
 | `user-service` | build `services/user-service/Dockerfile` | `8082` (gRPC), `8092` (REST + Swagger + `/healthz`) |
 | `book-db` | `postgres:17` | `5434` |
@@ -163,12 +179,24 @@ docker compose down -v          # остановить и удалить volume
 | `ai-rag-db` | `pgvector/pgvector:pg17` | `5433` |
 | `rabbitmq` | `rabbitmq:4-management` | `5672`, `15672` |
 
-Контейнеры создаются с префиксом `library-` (через `container_name` в `docker-compose.yml`): `library-book-service`, `library-user-service`, `library-book-db`, `library-user-db`, `library-ai-rag-db`, `library-rabbitmq`.
+Контейнеры создаются с префиксом `library-` (через `container_name` в `docker-compose.yml`): `library-api-gateway`, `library-book-service`, `library-user-service`, `library-book-db`, `library-user-db`, `library-ai-rag-db`, `library-rabbitmq`.
 
 Оба Dockerfile'а — multi-stage (`golang:1.27-alpine` → `alpine:3.21`), собираются из **корня репозитория**:
 модули используют `replace ... => ../../pkg`, поэтому контекст сборки — корень, а не каталог сервиса.
 Контейнеры работают под непривилегированным пользователем; healthcheck бьёт в `GET /healthz`
 (HTTP-эндпоинт, добавленный рядом с REST-слоем).
+
+### Переменные окружения API Gateway
+
+| Переменная | Назначение | По умолчанию |
+| --- | --- | --- |
+| `GATEWAY_HTTP_ADDR` | Адрес HTTP-сервера шлюза | `:8080` |
+| `GATEWAY_BOOK_SERVICE_URL` | REST-адрес book-service (обязательная) | — |
+| `GATEWAY_USER_SERVICE_URL` | REST-адрес user-service (обязательная) | — |
+| `GATEWAY_USER_SERVICE_GRPC_ADDR` | gRPC-адрес user-service для AuthenticateToken (обязательная) | — |
+| `GATEWAY_LOG_LEVEL` | Уровень логирования: debug\|info\|warn\|error | `info` |
+| `GATEWAY_LOG_FORMAT` | Формат логов: json\|text | `json` |
+| `GATEWAY_SHUTDOWN_TIMEOUT` | Бюджет graceful shutdown | `15s` |
 
 
 Учётные данные брокера берутся из `RABBITMQ_USER`/`RABBITMQ_PASS` (по умолчанию `guest`).
@@ -180,7 +208,7 @@ docker compose down -v          # остановить и удалить volume
 
 ```
 smart-library/
-├── go.work              # воркспейс: ./services/book-service, ./services/user-service, ./pkg
+├── go.work              # воркспейс: ./services/api-gateway, ./services/book-service, ./services/user-service, ./pkg
 ├── README.md            # этот файл
 ├── KODA.md              # контекст репозитория для AI-сессий
 ├── docker-compose.yml   # сервисы + БД + RabbitMQ: book/user-service, book-db (:5434), user-db (:5432), pgvector (:5433)
@@ -200,6 +228,7 @@ smart-library/
 ├── internal/            # артефакт до реструктуризации #19 (не импортируется; кандидат на удаление)
 ├── pkg/                 # общие библиотеки (config, logger, migrate)
 └── services/
+    ├── api-gateway/     # реализован (#10): gRPC-аутентификация через user-service, маршрутизация запросов к book/user сервисам, порт :8080
     ├── book-service/    # реализован, см. services/book-service/README.md
     │   ├── Dockerfile   # multi-stage образ (контекст сборки — корень репозитория)
     │   ├── cmd/server/

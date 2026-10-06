@@ -125,7 +125,7 @@ smart-library/
 | Аутентификация и RBAC | готово: argon2id-пароли, bearer-токены (в БД только SHA-256-хеш), сессии с TTL, роли READER/LIBRARIAN, интерцептор + проверки в домене |
 | Хранилище User Service | PostgreSQL 17 в Docker (`database/sql` + `lib/pq`), миграции при старте |
 | Тесты User Service | домен, security (PR #11) и HTTP-слой (PR #26) — готово; сервис и репозиторий — нет |
-| API Gateway | нет (issue #10) |
+| API Gateway | **готово** (issue #10): reverse-proxy с gRPC-аутентификацией через user-service, маршрутизация по пути, `GATEWAY_*` env vars |
 | Loan Service, Notification Service | нет, задачи не заведены |
 | gRPC-клиенты между сервисами, события, discovery | discovery: ADR-0003 принято (Kubernetes DNS); брокер: ADR-0001 (RabbitMQ); реализация — #14 |
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28) |
