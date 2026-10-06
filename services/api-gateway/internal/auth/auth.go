@@ -1,191 +1,114 @@
 // Package auth provides the authentication and authorization middleware of the
 // API gateway.
 //
-// Every request that is not explicitly public has to carry a bearer token in the
-// Authorization header. The token is verified once, at the edge, and the identity
-// it resolves to is put on the request context, so the handlers and the role
-// checks downstream read it instead of parsing the token again.
+// The gateway does not validate tokens locally. It delegates to user-service
+// over gRPC (AuthenticateToken) and the identity the service returns becomes
+// the Principal carried in the request context.
 //
 // The roles are the ones user-service issues:
-//   - READER: reads the catalog, borrows and returns copies
-//   - LIBRARIAN: manages the catalog and the accounts of readers
-//   - ADMIN: full access
+//
+//	READER  — reads the catalog, borrows and returns copies
+//	LIBRARIAN — manages the catalog and the accounts of readers
 package auth
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 )
 
-// Role is the privilege level of an authenticated caller.
-type Role string
-
-const (
-	RoleReader    Role = "READER"
-	RoleLibrarian Role = "LIBRARIAN"
-	RoleAdmin     Role = "ADMIN"
-)
-
-// Claims is the set of assertions the gateway trusts once a token verifies.
-type Claims struct {
-	UserID string `json:"sub"`
-	Role   string `json:"role"`
-	Iss    string `json:"iss"`
-	Iat    int64  `json:"iat"`
-	Exp    int64  `json:"exp"`
+// Principal is the caller the gateway resolves from a bearer token.
+type Principal struct {
+	UserID string
+	Email  string
+	Role   string
 }
 
-// Valid reports whether the token is still within its lifetime.
-func (c *Claims) Valid() error {
-	if c.Exp == 0 {
-		return fmt.Errorf("auth: token has no expiration")
+type contextKey int
+
+const principalKey contextKey = iota
+
+// Verifier resolves a bearer token into the principal behind it.
+//
+// The gateway uses a gRPC implementation that calls AuthenticateToken on
+// user-service; tests use a stub.
+type Verifier interface {
+	Verify(ctx context.Context, token string) (Principal, error)
+}
+
+// PrincipalFrom reads the caller out of the request context.
+func PrincipalFrom(ctx context.Context) (Principal, bool) {
+	p, ok := ctx.Value(principalKey).(Principal)
+
+	return p, ok
+}
+
+// WithPrincipal returns a context carrying the caller.
+func WithPrincipal(ctx context.Context, p Principal) context.Context {
+	return context.WithValue(ctx, principalKey, p)
+}
+
+// bearerPrefix is the scheme the gateway expects in the Authorization header.
+const bearerPrefix = "Bearer "
+
+// tokenFromRequest extracts the bearer token from the request headers.
+func tokenFromRequest(r *http.Request) (string, bool) {
+	value := strings.TrimSpace(r.Header.Get("Authorization"))
+	if !strings.HasPrefix(value, bearerPrefix) {
+		return "", false
 	}
 
-	if time.Now().Unix() > c.Exp {
-		return fmt.Errorf("auth: token expired")
-	}
+	token := strings.TrimSpace(strings.TrimPrefix(value, bearerPrefix))
 
-	return nil
+	return token, token != ""
 }
 
-// contextKey is a private type for the context keys of this package, so a key
-// defined elsewhere can never collide with one of ours.
-type contextKey string
-
-const claimsKey contextKey = "gateway-claims"
-
-// ClaimsFromContext returns the caller resolved by the middleware, if any.
-func ClaimsFromContext(ctx context.Context) (*Claims, bool) {
-	c, ok := ctx.Value(claimsKey).(*Claims)
-
-	return c, ok
-}
-
-// Authenticator rejects a request whose bearer token is missing, malformed, badly
-// signed or expired, and otherwise puts the resolved Claims on the context of the
-// request it forwards.
-type Authenticator struct {
-	publicPaths map[string]bool
-}
-
-// NewAuthenticator builds an Authenticator for the given public paths. Paths are
-// matched without the HTTP method, for example "/v1/auth/login".
-func NewAuthenticator(publicPaths ...string) *Authenticator {
-	m := make(map[string]bool, len(publicPaths))
-	for _, p := range publicPaths {
-		m[p] = true
-	}
-	// The documentation shell has to stay reachable without a session.
-	m["/swagger/"] = true
-
-	return &Authenticator{publicPaths: m}
-}
-
-// Middleware wraps next with the token check.
-func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+// Authenticator is the middleware that protects every route behind it.
+//
+// A missing or malformed header is answered here, before any upstream call; a
+// token the verifier rejects becomes 401.
+func Authenticator(verifier Verifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Public paths are forwarded untouched.
-		path := strings.TrimRight(r.URL.Path, "/")
-		if a.publicPaths[path] || a.publicPaths[r.URL.Path] {
-			next.ServeHTTP(w, r)
+		token, ok := tokenFromRequest(r)
+		if !ok {
+			http.Error(w, `{"error":"missing bearer token"}`, http.StatusUnauthorized)
 
 			return
 		}
 
-		// Everything else has to present a bearer credential.
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, `{"code":16,"message":"missing authorization header"}`, http.StatusUnauthorized)
-
-			return
-		}
-
-		const prefix = "Bearer "
-
-		if !strings.HasPrefix(authHeader, prefix) {
-			http.Error(w, `{"code":16,"message":"invalid authorization header format"}`, http.StatusUnauthorized)
-
-			return
-		}
-
-		tokenStr := strings.TrimPrefix(authHeader, prefix)
-
-		claims, err := ParseToken(tokenStr)
+		principal, err := verifier.Verify(r.Context(), token)
 		if err != nil {
-			http.Error(w, fmt.Sprintf(`{"code":16,"message":"invalid token: %s"}`, err), http.StatusUnauthorized)
+			http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
 
 			return
 		}
 
-		// Carry the resolved caller into the handler.
-		ctx := context.WithValue(r.Context(), claimsKey, claims)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), principal)))
 	})
 }
 
-// RequireRole returns a middleware that only lets callers with one of the listed
-// roles through. It has to be mounted behind an Authenticator: with no claims to
-// check it answers 401 rather than 403, so a missing session is not reported as a
-// permission problem.
-func RequireRole(allowed ...Role) func(http.Handler) http.Handler {
+// RequireRole returns a middleware that lets only the named role through.
+//
+// It answers 403 for an authenticated caller of the wrong role and 401 when no
+// caller is in the context at all (i.e. RequireRole is mounted outside
+// Authenticator — a configuration error).
+func RequireRole(role string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, ok := ClaimsFromContext(r.Context())
+			principal, ok := PrincipalFrom(r.Context())
 			if !ok {
-				http.Error(w, `{"code":16,"message":"unauthenticated"}`, http.StatusUnauthorized)
+				http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
 
 				return
 			}
 
-			role := Role(claims.Role)
-			for _, a := range allowed {
-				if role == a {
-					next.ServeHTTP(w, r)
+			if !strings.EqualFold(principal.Role, role) {
+				http.Error(w, `{"error":"insufficient permissions"}`, http.StatusForbidden)
 
-					return
-				}
+				return
 			}
 
-			http.Error(w, `{"code":7,"message":"insufficient permissions"}`, http.StatusForbidden)
+			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// ParseToken verifies the signature of a token and decodes its claims.
-//
-// The signature is HMAC-SHA256 over "header.payload" with the shared secret from
-// the environment, which is the same secret the issuer of the token signs with.
-func ParseToken(tokenStr string) (*Claims, error) {
-	secret := getSecret()
-
-	parts := strings.Split(tokenStr, ".")
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid token format")
-	}
-
-	// Reject a foreign or tampered token before looking at what it claims.
-	signingInput := parts[0] + "." + parts[1]
-	if !verifyHMAC(signingInput, parts[2], secret) {
-		return nil, fmt.Errorf("invalid token signature")
-	}
-
-	payload, err := base64URLDecode(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("invalid token payload: %w", err)
-	}
-
-	var claims Claims
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, fmt.Errorf("invalid token claims: %w", err)
-	}
-
-	if err := claims.Valid(); err != nil {
-		return nil, err
-	}
-
-	return &claims, nil
 }

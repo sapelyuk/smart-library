@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0
+	github.com/sapelyuk/smart-library/pkg v0.0.0
 	github.com/sapelyuk/smart-library/services/book-service v0.0.0
 	github.com/sapelyuk/smart-library/services/user-service v0.0.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d

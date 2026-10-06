@@ -1,8 +1,9 @@
 # API Gateway
 
 **API Gateway** — единый HTTP-вход для клиентских приложений Smart Library.
-Шлюз проверяет JWT-токен, маршрутизирует запросы к `book-service` и `user-service`
-по префиксу пути и добавляет заголовок `X-Forwarded-For`.
+Шлюз проверяет bearer-токены через gRPC `AuthenticateToken` user-service,
+маршрутизирует запросы к `book-service` и `user-service` по префиксу пути и
+добавляет заголовок `X-Forwarded-For`.
 
 ```
 Клиент (HTTP/JSON)
@@ -10,7 +11,7 @@
         ▼
 ┌─────────────────────────────────────────┐
 │  API Gateway :8080                       │
-│  JWT-аутентификация · маршрутизация      │
+│  gRPC-аутентификация · маршрутизация    │
 ├────────────────┬────────────────────────┤
 │  /v1/books/*   │  /v1/users/* /v1/auth/ │
 │  /v1/borrow/*  │                        │
@@ -26,13 +27,13 @@ Gateway — **reverse-proxy** на стандартной библиотеке G
 - **Маршрутизация** по префиксу URL в `http.ServeMux`:
   - `/v1/books/*`, `/v1/borrow/*` → `book-service` (HTTP :8091)
   - `/v1/users/*`, `/v1/auth/*` → `user-service` (HTTP :8092)
-- **Аутентификация** — middleware, проверяет Bearer-токен:
-  - Публичные пути (`/v1/auth/login`, `/v1/auth/register`) — без JWT
+- **Аутентификация** — middleware, проверяет Bearer-токен через gRPC
+  `AuthenticateToken` user-service:
+  - Публичные пути (`/v1/auth/login`, `/v1/auth/register`) — без токена
   - Остальные пути — требуют `Authorization: Bearer <token>`
 - **Авторизация** — middleware `RequireRole()`:
-  - `READER` — чтение каталога, borrow/return
-  - `LIBRARIAN` — CRUD книг, управление пользователями
-  - `ADMIN` — полный доступ
+  - `/v1/users` и `/v1/books` (без слэша) — только `ROLE_LIBRARIAN`
+  - `/v1/users/{id}`, `/v1/books/{id}` — любой аутентифицированный пользователь
 
 ## Запуск
 
@@ -43,14 +44,15 @@ docker compose up -d api-gateway
 ```
 
 Gateway подключается к `book-service` и `user-service` по их Docker-именам:
-`book-service:8091` и `user-service:8092`.
+`book-service:8091` и `user-service:8092` (REST), `user-service:8082` (gRPC).
 
 ### Локальный запуск (из шелла)
 
 ```bash
 cd services/api-gateway
-export BOOK_SERVICE_URL=http://localhost:8091
-export USER_SERVICE_URL=http://localhost:8092
+export GATEWAY_BOOK_SERVICE_URL=http://localhost:8091
+export GATEWAY_USER_SERVICE_URL=http://localhost:8092
+export GATEWAY_USER_SERVICE_GRPC_ADDR=localhost:8082
 go run ./cmd/server
 ```
 
@@ -58,20 +60,22 @@ go run ./cmd/server
 
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
-| `HTTP_ADDR` | `:8080` | адрес HTTP-шлюза |
-| `BOOK_SERVICE_URL` | *(обязательна)* | HTTP-адрес book-service (grpc-gateway) |
-| `USER_SERVICE_URL` | *(обязательна)* | HTTP-адрес user-service (grpc-gateway) |
-| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `LOG_FORMAT` | `json` | `json` или `text` |
-| `SHUTDOWN_TIMEOUT` | `15s` | таймаут graceful shutdown |
-| `SHARE_SECRET` | `smart-library-dev-secret` | секрет для проверки JWT-подписи |
+| `GATEWAY_HTTP_ADDR` | `:8080` | адрес HTTP-шлюза |
+| `GATEWAY_BOOK_SERVICE_URL` | *(обязательна)* | HTTP-адрес book-service (grpc-gateway) |
+| `GATEWAY_USER_SERVICE_URL` | *(обязательна)* | HTTP-адрес user-service (grpc-gateway) |
+| `GATEWAY_USER_SERVICE_GRPC_ADDR` | *(обязательна)* | gRPC-адрес user-service (AuthenticateToken) |
+| `GATEWAY_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `GATEWAY_LOG_FORMAT` | `json` | `json` или `text` |
+| `GATEWAY_SHUTDOWN_TIMEOUT` | `15s` | таймаут graceful shutdown |
 
 ## Маршрутизация
 
 | Путь       | Сервис         | Порт | Авторизация |
 | ---        | ---            | ---  | ---       |
+| `/v1/books` | book-service | 8091 | LIBRARIAN |
 | `/v1/books/*` | book-service | 8091 | да |
 | `/v1/borrow/*` | book-service | 8091 | да |
+| `/v1/users` | user-service | 8092 | LIBRARIAN |
 | `/v1/users/*` | user-service | 8092 | да |
 | `/v1/auth/login` | user-service | 8092 | нет |
 | `/v1/auth/register` | user-service | 8092 | нет |
@@ -81,10 +85,9 @@ go run ./cmd/server
 
 ## Безопасность
 
-- JWT-токены проверяются через HMAC-SHA256 с секретом `SHARE_SECRET`.
-- Секрет должен совпадать на Gateway и User Service.
-- Публичные пути (`login`, `register`) не требуют JWT.
-- Все запросы к Gateway проходят через аутентификатор.
+- Bearer-токены проверяются через gRPC `AuthenticateToken` user-service.
+- `ROLE_LIBRARIAN` требуется на точных путях `/v1/users` и `/v1/books`.
+- Публичные пути (`login`, `register`) не требуют токена.
 - Заголовок `X-Forwarded-For` добавляется для каждого запроса.
 
 ## Структура
@@ -93,9 +96,9 @@ go run ./cmd/server
 api-gateway/
 ├── cmd/server/main.go     # main: env-конфиг, маршрутизация, HTTP-сервер
 ├── internal/
-│   ├── auth/              # JWT-аутентификация и middleware
-│   │   ├── auth.go        # Authenticator, RequireRole, Claims
-│   │   └── jwt.go         # HMAC-SHA256 проверка, base64url декодирование
+│   ├── auth/              # gRPC-аутентификация и middleware
+│   │   ├── auth.go        # Authenticator, RequireRole, Principal
+│   │   └── grpc.go        # Verifier: gRPC-вызов AuthenticateToken
 │   └── proxy/             # обратный прокси к book/user сервисам
 │       └── proxy.go       # httputil.ReverseProxy, Director
 ├── proto/                 # proto-контракт GatewayService
@@ -118,5 +121,5 @@ go test ./...
 
 - **Book Service** (`:8091`) — маршрутизация по `/v1/books/*`, `/v1/borrow/*`
 - **User Service** (`:8092`) — маршрутизация по `/v1/users/*`, `/v1/auth/*`
+- **User Service gRPC** (`:8082`) — вызов `AuthenticateToken` для верификации токенов
 - **Docker Compose** — gateway зависит от book-service и user-service
-- **JWT-секрет** — `SHARE_SECRET` (должен совпадать с User Service)
