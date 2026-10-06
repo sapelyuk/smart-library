@@ -41,6 +41,10 @@ jobs:
         run: go build ./...
         working-directory: pkg
 
+      - name: Build api-gateway
+        run: go build ./...
+        working-directory: services/api-gateway
+
       - name: Build book-service
         run: go build ./...
         working-directory: services/book-service

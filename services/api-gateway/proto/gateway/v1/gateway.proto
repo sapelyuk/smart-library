@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package gateway.v1;
+
+import "book/v1/book.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "user/v1/user.proto";
+
+option go_package = "github.com/sapelyuk/smart-library/services/api-gateway/gen/go/gateway/v1;gatewayv1";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "API Gateway"
+    version: "1.0"
+    description: "Single HTTP entry point for the Smart Library platform. Routes requests to Book Service and User Service over gRPC. Authentication is handled via Bearer token; role-based access control restricts librarian operations."
+    contact: {name: "Smart Library"}
+  }
+  consumes: "application/json"
+  produces: "application/json"
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        description: "Session token returned by Login, sent as 'Bearer <token>'."
+        name: "authorization"
+        in: IN_HEADER
+      }
+    }
+  }
+};
+
+// GatewayService aggregates the REST API of book-service and user-service
+// behind a single HTTP endpoint (:8080). Every RPC delegates to the
+// corresponding backend gRPC client after authentication and authorization.
+service GatewayService {
+  // ---- user-service: public ----
+
+  rpc Register(user.v1.RegisterRequest) returns (user.v1.User) {
+    option (google.api.http) = {post: "/v1/auth/register" body: "*"};
+  }
+
+  rpc Login(user.v1.LoginRequest) returns (user.v1.Session) {
+    option (google.api.http) = {post: "/v1/auth/login" body: "*"};
+  }
+
+  // ---- user-service: authenticated ----
+
+  rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (google.api.http) = {post: "/v1/auth/logout"};
+  }
+
+  rpc GetCurrentUser(google.protobuf.Empty) returns (user.v1.User) {
+    option (google.api.http) = {get: "/v1/users/me"};
+  }
+
+  rpc CreateUser(user.v1.CreateUserRequest) returns (user.v1.User) {
+    option (google.api.http) = {post: "/v1/users" body: "*"};
+  }
+
+  rpc GetUser(user.v1.GetUserRequest) returns (user.v1.User) {
+    option (google.api.http) = {get: "/v1/users/{id}"};
+  }
+
+  rpc ListUsers(user.v1.ListUsersRequest) returns (user.v1.ListUsersResponse) {
+    option (google.api.http) = {get: "/v1/users"};
+  }
+
+  rpc UpdateUser(user.v1.UpdateUserRequest) returns (user.v1.User) {
+    option (google.api.http) = {patch: "/v1/users/{id}" body: "*"};
+  }
+
+  rpc ChangePassword(user.v1.ChangePasswordRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {post: "/v1/users/{id}/password" body: "*"};
+  }
+
+  rpc DeactivateUser(user.v1.DeactivateUserRequest) returns (user.v1.User) {
+    option (google.api.http) = {post: "/v1/users/{id}/deactivate"};
+  }
+
+  rpc RestoreUser(user.v1.RestoreUserRequest) returns (user.v1.User) {
+    option (google.api.http) = {post: "/v1/users/{id}/restore"};
+  }
+
+  // ---- book-service ----
+
+  rpc CreateBook(book.v1.CreateBookRequest) returns (book.v1.Book) {
+    option (google.api.http) = {post: "/v1/books" body: "*"};
+  }
+
+  rpc GetBook(book.v1.GetBookRequest) returns (book.v1.Book) {
+    option (google.api.http) = {get: "/v1/books/{id}"};
+  }
+
+  rpc ListBooks(book.v1.ListBooksRequest) returns (book.v1.ListBooksResponse) {
+    option (google.api.http) = {get: "/v1/books"};
+  }
+
+  rpc UpdateBook(book.v1.UpdateBookRequest) returns (book.v1.Book) {
+    option (google.api.http) = {patch: "/v1/books/{id}" body: "*"};
+  }
+
+  rpc DeleteBook(book.v1.DeleteBookRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {delete: "/v1/books/{id}"};
+  }
+
+  rpc AddBookCopy(book.v1.AddBookCopyRequest) returns (book.v1.BookCopy) {
+    option (google.api.http) = {post: "/v1/books/{book_id}/copies" body: "*"};
+  }
+
+  rpc ListBookCopies(book.v1.ListBookCopiesRequest) returns (book.v1.ListBookCopiesResponse) {
+    option (google.api.http) = {get: "/v1/books/{book_id}/copies"};
+  }
+
+  rpc BorrowBookCopy(book.v1.BorrowBookCopyRequest) returns (book.v1.BookCopy) {
+    option (google.api.http) = {post: "/v1/books/{book_id}/borrow" body: "*"};
+  }
+
+  rpc ReturnBookCopy(book.v1.ReturnBookCopyRequest) returns (book.v1.BookCopy) {
+    option (google.api.http) = {post: "/v1/copies/{copy_id}/return" body: "*"};
+  }
+}
