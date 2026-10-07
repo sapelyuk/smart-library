@@ -28,7 +28,8 @@ Go-адаптер AI-сервиса — следующие этапы.
 Book Service дополнительно поднимает HTTP-слой для разработки на **8091**: REST-эндпоинты,
 сгенерированные из аннотаций `google.api.http` его proto-контракта (grpc-gateway),
 плюс Swagger UI по адресу `http://localhost:8091/swagger/`. User Service повторяет
-это на **8082** (gRPC) / **8092** (REST + Swagger).
+это на **8082** (gRPC) / **8092** (REST + Swagger), Loan Service — на **8083**
+(gRPC) / **8093** (REST + Swagger).
 
 **API Gateway** — единая HTTP-точка входа для клиентских приложений. Клиент не знает
 адресов отдельных микросервисов: все запросы идут на `:8080`, а шлюз маршрутизирует
@@ -47,7 +48,8 @@ Book Service дополнительно поднимает HTTP-слой для 
 
 ## Паттерны взаимодействия:
 - Синхронно: gRPC между сервисами (быстро, типизированно)
-- Асинхронно: **RabbitMQ** для событий (`book.borrowed`, `loan.overdue`) —
+- Асинхронно: **RabbitMQ** для событий (`loan.issued`, `loan.returned`,
+  `loan.overdue`) —
   выбор зафиксирован в `docs/adr/0001-message-broker.md`: topic exchange
   `library.events`, routing key = тип события, publisher confirms + ручной ack,
   отложенные доставки через TTL + dead-letter exchange
@@ -115,18 +117,17 @@ Smart Library AI является **первоклассным компонен�
 | User Service (proto, domain, security, service, handler, server) | готово, хранилище **PostgreSQL** (argon2id + bearer-токены) |
 | User Service REST + Swagger UI (grpc-gateway, `:8092`) | готово                                                |
 | Миграции User Service (`pkg/migrate`, embed FS)        | готовы, применяются при старте                         |
-| Локальный запуск сервисов                              | `cd services/api-gateway` (HTTP `:8080`) / `cd services/book-service` (gRPC `:8081`, REST `:8091`) / `cd services/user-service` (gRPC `:8082`, REST `:8092`) |
-| Контейнеризация (multi-stage Dockerfile + compose)    | готово — `#6` (PR #39); сервисы + 3 БД + RabbitMQ в `docker-compose.yml`, healthcheck `GET /healthz` |
-| CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book-service идут против сервис-контейнера `postgres:17` |
+| Локальный запуск сервисов                              | `cd services/api-gateway` (HTTP `:8080`) / `cd services/book-service` (gRPC `:8081`, REST `:8091`) / `cd services/user-service` (gRPC `:8082`, REST `:8092`) / `cd services/loan-service` (gRPC `:8083`, REST `:8093`) |
+| Контейнеризация (multi-stage Dockerfile + compose)    | готово — `#6` (PR #39); сервисы + 4 БД + RabbitMQ в `docker-compose.yml`, healthcheck `GET /healthz` |
+| CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book- и loan-service идут против сервис-контейнера `postgres:17` |
 | OpenAPI/Swagger из proto-аннотаций                    | готово: `grpc-gateway` генерирует REST-маршруты и `swagger.json` (embed в сервисы) |
 | Брокер сообщений: выбор и локальная инфраструктура    | готово: ADR-0001 (RabbitMQ), `docker-compose.yml`; реализация продюсеров/консьюмеров — `#14` |
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | не начато — `#23`; архитектура — ADR-0002              |
-| Loan Service                                           | не начато — `#49`                                      |
 | Notification Service                                   | не начато — `#48`                                      |
 | API Gateway                                            | готово — `#10` (gRPC-аутентификация через user-service, маршрутизация по пути, Dockerfile) |
-| Межсервисные gRPC-клиенты, discovery                  | не начато; User Service отдаёт `AuthenticateToken` для gateway; discovery — `#8` |
+| Межсервисные gRPC-клиенты, discovery                  | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); gateway — user-service; discovery — `#8` |
 | User Service: техдолг (хранилище и API)                | `#32` (pgx вместо lib/pq), `#33` (pg_trgm + keyset-пагинация), `#34` (rate limiting), `#31` (кэш валидации сессий) |
 
 Локальный запуск Book Service (нужна база PostgreSQL — поднимается через
@@ -148,6 +149,18 @@ cd services/user-service
 go run ./cmd/server     # gRPC на :8082, REST + Swagger на :8092
 ```
 
+Локальный запуск Loan Service (нужна база PostgreSQL — поднимается через
+`docker compose up -d loan-db`, и запущенные book- и user-service; переменные
+`LOAN_SERVICE_*` описаны в `services/loan-service/README.md`):
+
+```bash
+cd services/loan-service
+export LOAN_SERVICE_DB_DSN='host=localhost port=5435 user=library password=library dbname=library_loans sslmode=disable'
+export LOAN_SERVICE_BOOK_SERVICE_GRPC_ADDR='localhost:8081'
+export LOAN_SERVICE_USER_SERVICE_GRPC_ADDR='localhost:8082'
+go run ./cmd/server     # gRPC на :8083, REST + Swagger на :8093
+```
+
 Сборка / проверка / тесты (из директории модуля, не из корня репозитория):
 
 ```bash
@@ -163,7 +176,7 @@ go build ./... && go vet ./... && go test ./...
 Полный стек одной командой (сборка образов сервисов + инфраструктура):
 
 ```bash
-docker compose up -d --build    # сервисы :8080/:8081/:8091/:8082/:8092 + БД + RabbitMQ
+docker compose up -d --build    # сервисы :8080/:8081/:8091/:8082/:8092/:8083/:8093 + БД + RabbitMQ
 docker compose logs -f book-service
 docker compose down -v          # остановить и удалить volume
 ```
@@ -175,15 +188,19 @@ docker compose down -v          # остановить и удалить volume
 | `api-gateway` | build `services/api-gateway/Dockerfile` | `8080` (REST-маршрутизация, gRPC-аутентификация, `/healthz`) |
 | `book-service` | build `services/book-service/Dockerfile` | `8081` (gRPC), `8091` (REST + Swagger + `/healthz`) |
 | `user-service` | build `services/user-service/Dockerfile` | `8082` (gRPC), `8092` (REST + Swagger + `/healthz`) |
+| `loan-service` | build `services/loan-service/Dockerfile` | `8083` (gRPC), `8093` (REST + Swagger + `/healthz`) |
 | `book-db` | `postgres:17` | `5434` |
 | `user-db` | `postgres:17` | `5432` |
+| `loan-db` | `postgres:17` | `5435` |
 | `ai-rag-db` | `pgvector/pgvector:pg17` | `5433` |
 | `rabbitmq` | `rabbitmq:4-management` | `5672`, `15672` |
 
-Контейнеры создаются с префиксом `library-` (через `container_name` в `docker-compose.yml`): `library-api-gateway`, `library-book-service`, `library-user-service`, `library-book-db`, `library-user-db`, `library-ai-rag-db`, `library-rabbitmq`.
+Контейнеры создаются с префиксом `library-` (через `container_name` в `docker-compose.yml`): `library-api-gateway`, `library-book-service`, `library-user-service`, `library-loan-service`, `library-book-db`, `library-user-db`, `library-loan-db`, `library-ai-rag-db`, `library-rabbitmq`.
 
-Оба Dockerfile'а — multi-stage (`golang:1.27-alpine` → `alpine:3.21`), собираются из **корня репозитория**:
+Все Dockerfile'ы — multi-stage (`golang:1.27-alpine` → `alpine:3.21`), собираются из **корня репозитория**:
 модули используют `replace ... => ../../pkg`, поэтому контекст сборки — корень, а не каталог сервиса.
+`loan-service` дополнительно заменяет `book-service` и `user-service` (импортирует их сгенерированные
+proto-пакеты), поэтому его Dockerfile копирует исходники обоих sibling-модулей.
 Контейнеры работают под непривилегированным пользователем; healthcheck бьёт в `GET /healthz`
 (HTTP-эндпоинт, добавленный рядом с REST-слоем).
 
@@ -209,10 +226,10 @@ docker compose down -v          # остановить и удалить volume
 
 ```
 smart-library/
-├── go.work              # воркспейс: ./services/api-gateway, ./services/book-service, ./services/user-service, ./pkg
+├── go.work              # воркспейс: ./services/api-gateway, ./services/book-service, ./services/user-service, ./services/loan-service, ./pkg
 ├── README.md            # этот файл
 ├── KODA.md              # контекст репозитория для AI-сессий
-├── docker-compose.yml   # сервисы + БД + RabbitMQ: api-gateway (:8080), book/user-service, book-db (:5434), user-db (:5432), pgvector (:5433)
+├── docker-compose.yml   # сервисы + БД + RabbitMQ: api-gateway (:8080), book/user/loan-service, book-db (:5434), user-db (:5432), loan-db (:5435), pgvector (:5433)
 ├── .dockerignore        # исключает .git, go.work, артефакты из контекста сборки
 ├── .github/workflows/   # CI: build + test (ci.yml)
 ├── docs/
@@ -246,6 +263,14 @@ smart-library/
     │   ├── docs/        # swagger.json (генерация) + обёртка go:embed
     │   ├── internal/    # domain, security, repository (postgres), service, handler
     │   └── migrations/
+    ├── loan-service/    # реализован (#49), см. services/loan-service/README.md
+    │   ├── Dockerfile   # multi-stage образ (контекст сборки — корень репозитория)
+    │   ├── cmd/server/
+    │   ├── proto/loan/v1/
+    │   ├── gen/go/      # генерация, не править руками
+    │   ├── docs/        # swagger.json (генерация) + обёртка go:embed
+    │   ├── internal/    # domain, service, repository (postgres), bookclient, usersvc, auth, events, testdb, handler
+    │   └── migrations/
     └── ai-service/      # ADR-0002; RAG-прототип работает, см. services/ai-service/README.md
         └── rag/         # рабочий прототип RAG: n8n workflow, pgvector схема (db/),
                          # скрипты (scripts/), документация (docs/),
@@ -253,8 +278,8 @@ smart-library/
                          # tests/ — 53 offline-теста, .env.example — шаблон переменных
 ```
 
-Сервисы `loan-service` и `notification-service` из архитектурной таблицы ещё не
-созданы как директории — заведены задачи `#49` и `#48` соответственно.
+Сервис `notification-service` из архитектурной таблицы ещё не создан как
+директория — заведена задача `#48`.
 
 Для локальной разработки нескольких модулей одновременно используется Go-воркспейс
 (`go.work`).
