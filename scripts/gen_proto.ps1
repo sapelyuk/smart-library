@@ -17,7 +17,7 @@ if (-not (Test-Path $protoc)) {
 
 $env:PATH = "$(go env GOPATH)\bin;$env:PATH"
 
-foreach ($module in @("services/book-service", "services/user-service")) {
+foreach ($module in @("services/book-service", "services/user-service", "services/loan-service")) {
     $outDir = Join-Path $root "$module/gen/go"
     $docsDir = Join-Path $root "$module/docs"
     New-Item -ItemType Directory -Force -Path $outDir, $docsDir | Out-Null
@@ -28,8 +28,8 @@ foreach ($module in @("services/book-service", "services/user-service")) {
         ForEach-Object { $_.FullName.Substring($root.Length + 1).Replace("\", "/") }
 
     & $protoc "-I" "$module/proto" "-I" "third_party" `
-        "--go_out" "$module/gen/go" "--go_opt" "paths=source_relative,module=github.com/sapelyuk/smart-library" `
-        "--go-grpc_out" "$module/gen/go" "--go-grpc_opt" "paths=source_relative,module=github.com/sapelyuk/smart-library" `
+        "--go_out" "$module/gen/go" "--go_opt" "paths=source_relative" `
+        "--go-grpc_out" "$module/gen/go" "--go-grpc_opt" "paths=source_relative" `
         "--grpc-gateway_out" "$module/gen/go" "--grpc-gateway_opt" "paths=source_relative,logtostderr=true" `
         "--openapiv2_out" "$module/docs" "--openapiv2_opt" "logtostderr=true" `
         $protoFiles

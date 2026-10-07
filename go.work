@@ -4,5 +4,6 @@ use (
 	./pkg
 	./services/api-gateway
 	./services/book-service
+	./services/loan-service
 	./services/user-service
 )
