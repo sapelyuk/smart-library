@@ -1,0 +1,201 @@
+syntax = "proto3";
+
+package loan.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/sapelyuk/smart-library/services/loan-service/gen/go/loan/v1;loanv1";
+
+// Metadata of the Swagger UI served by the HTTP interface of the service.
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Loan Service API"
+    version: "1.0"
+    description: "Lifecycle of a book loan: who borrowed which copy, until when and when it was returned. REST endpoints are proxied to loan.v1.LoanService over gRPC. Every method expects the header 'authorization: Bearer <token>' with the token returned by the user-service Login."
+    contact: {name: "Smart Library"}
+  }
+  consumes: "application/json"
+  produces: "application/json"
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        description: "Session token returned by the user-service Login, sent as 'Bearer <token>'."
+        name: "authorization"
+        in: IN_HEADER
+      }
+    }
+  }
+};
+
+// Lifecycle state of a loan.
+enum LoanStatus {
+  LOAN_STATUS_UNSPECIFIED = 0;
+
+  // The copy is out and the due date has not passed yet.
+  LOAN_STATUS_ACTIVE = 1;
+
+  // The copy came back.
+  LOAN_STATUS_RETURNED = 2;
+
+  // The copy is out and the due date has passed. Derived from due_at, it is
+  // never stored: a background job would only have to keep it in sync.
+  LOAN_STATUS_OVERDUE = 3;
+}
+
+// Loan is the aggregate root of the lending domain. It records who borrowed
+// which copy of which book, for how long and when it came back.
+message Loan {
+  string id = 1;
+  string reader_id = 2;
+  string book_id = 3;
+  string copy_id = 4;
+  google.protobuf.Timestamp borrowed_at = 5;
+  google.protobuf.Timestamp due_at = 6;
+
+  // Absent while the copy is still out.
+  google.protobuf.Timestamp returned_at = 7;
+  LoanStatus status = 8;
+}
+
+message BorrowRequest {
+  // The reader the copy is lent to. A reader may borrow only for own account;
+  // a librarian may borrow for any reader.
+  string reader_id = 1;
+  string book_id = 2;
+}
+
+message BorrowResponse {
+  Loan loan = 1;
+}
+
+message ReturnRequest {
+  string loan_id = 1;
+}
+
+message ReturnResponse {
+  Loan loan = 1;
+}
+
+message RenewRequest {
+  string loan_id = 1;
+
+  // Number of days the due date is pushed forward.
+  int32 extend_days = 2;
+}
+
+message RenewResponse {
+  Loan loan = 1;
+}
+
+message GetRequest {
+  string loan_id = 1;
+}
+
+message ListRequest {
+  // Restrict the answer to one reader, empty means every reader. A reader sees
+  // only own loans whatever this field says.
+  string reader_id = 1;
+
+  // Restrict the answer to one book, empty means every book.
+  string book_id = 2;
+
+  // Restrict the answer to one status, UNSPECIFIED means every status.
+  LoanStatus status = 3;
+
+  // Page size, 0 means the service default (20), capped at 100.
+  int32 limit = 4;
+
+  // Number of entries to skip.
+  int32 offset = 5;
+}
+
+message ListResponse {
+  repeated Loan loans = 1;
+  int32 total = 2;
+}
+
+message ListOverdueRequest {
+  // Page size, 0 means the service default (20), capped at 100.
+  int32 limit = 1;
+
+  // Number of entries to skip.
+  int32 offset = 2;
+}
+
+message ListOverdueResponse {
+  repeated Loan loans = 1;
+  int32 total = 2;
+}
+
+// Lending lifecycle: borrow, renew, return and overdue tracking.
+//
+// Every RPC is also exposed as a REST endpoint through grpc-gateway, which is
+// what the Swagger UI at /swagger/ exercises. Every method refuses a request
+// without a valid bearer token with UNAUTHENTICATED and a request whose role or
+// ownership check fails with PERMISSION_DENIED.
+service LoanService {
+  // Lends the first available copy of a book to a reader. The copy is reserved
+  // through book-service before the loan is recorded.
+  rpc Borrow(BorrowRequest) returns (BorrowResponse) {
+    option (google.api.http) = {
+      post: "/v1/loans"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+
+  // Closes an active loan and makes the copy available again through
+  // book-service.
+  rpc Return(ReturnRequest) returns (ReturnResponse) {
+    option (google.api.http) = {
+      post: "/v1/loans/{loan_id}/return"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+
+  // Pushes the due date of an active loan forward. A returned loan cannot be
+  // renewed.
+  rpc Renew(RenewRequest) returns (RenewResponse) {
+    option (google.api.http) = {
+      post: "/v1/loans/{loan_id}/renew"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+
+  // Returns a single loan. A reader may read only own loans.
+  rpc Get(GetRequest) returns (Loan) {
+    option (google.api.http) = {get: "/v1/loans/{loan_id}"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+
+  // Returns a page of loans. A reader sees only own loans.
+  rpc List(ListRequest) returns (ListResponse) {
+    option (google.api.http) = {get: "/v1/loans"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+
+  // Returns active loans past their due date. A reader sees only own overdue
+  // loans; a librarian sees every one.
+  rpc ListOverdue(ListOverdueRequest) returns (ListOverdueResponse) {
+    option (google.api.http) = {get: "/v1/loans/overdue"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+}

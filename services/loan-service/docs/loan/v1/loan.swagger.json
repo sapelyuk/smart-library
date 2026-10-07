@@ -1,0 +1,469 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Loan Service API",
+    "description": "Lifecycle of a book loan: who borrowed which copy, until when and when it was returned. REST endpoints are proxied to loan.v1.LoanService over gRPC. Every method expects the header 'authorization: Bearer \u003ctoken\u003e' with the token returned by the user-service Login.",
+    "version": "1.0",
+    "contact": {
+      "name": "Smart Library"
+    }
+  },
+  "tags": [
+    {
+      "name": "LoanService",
+      "description": "Lending lifecycle: borrow, renew, return and overdue tracking.\n\nEvery RPC is also exposed as a REST endpoint through grpc-gateway, which is\nwhat the Swagger UI at /swagger/ exercises. Every method refuses a request\nwithout a valid bearer token with UNAUTHENTICATED and a request whose role or\nownership check fails with PERMISSION_DENIED."
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/loans": {
+      "get": {
+        "summary": "Returns a page of loans. A reader sees only own loans.",
+        "operationId": "LoanService_List",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "readerId",
+            "description": "Restrict the answer to one reader, empty means every reader. A reader sees\nonly own loans whatever this field says.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "bookId",
+            "description": "Restrict the answer to one book, empty means every book.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "description": "Restrict the answer to one status, UNSPECIFIED means every status.\n\n - LOAN_STATUS_ACTIVE: The copy is out and the due date has not passed yet.\n - LOAN_STATUS_RETURNED: The copy came back.\n - LOAN_STATUS_OVERDUE: The copy is out and the due date has passed. Derived from due_at, it is\nnever stored: a background job would only have to keep it in sync.",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "LOAN_STATUS_UNSPECIFIED",
+              "LOAN_STATUS_ACTIVE",
+              "LOAN_STATUS_RETURNED",
+              "LOAN_STATUS_OVERDUE"
+            ],
+            "default": "LOAN_STATUS_UNSPECIFIED"
+          },
+          {
+            "name": "limit",
+            "description": "Page size, 0 means the service default (20), capped at 100.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "offset",
+            "description": "Number of entries to skip.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "LoanService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Lends the first available copy of a book to a reader. The copy is reserved\nthrough book-service before the loan is recorded.",
+        "operationId": "LoanService_Borrow",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1BorrowResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1BorrowRequest"
+            }
+          }
+        ],
+        "tags": [
+          "LoanService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/loans/overdue": {
+      "get": {
+        "summary": "Returns active loans past their due date. A reader sees only own overdue\nloans; a librarian sees every one.",
+        "operationId": "LoanService_ListOverdue",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListOverdueResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "description": "Page size, 0 means the service default (20), capped at 100.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "offset",
+            "description": "Number of entries to skip.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "LoanService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/loans/{loanId}": {
+      "get": {
+        "summary": "Returns a single loan. A reader may read only own loans.",
+        "operationId": "LoanService_Get",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Loan"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "loanId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LoanService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/loans/{loanId}/renew": {
+      "post": {
+        "summary": "Pushes the due date of an active loan forward. A returned loan cannot be\nrenewed.",
+        "operationId": "LoanService_Renew",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RenewResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "loanId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/LoanServiceRenewBody"
+            }
+          }
+        ],
+        "tags": [
+          "LoanService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/loans/{loanId}/return": {
+      "post": {
+        "summary": "Closes an active loan and makes the copy available again through\nbook-service.",
+        "operationId": "LoanService_Return",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ReturnResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "loanId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/LoanServiceReturnBody"
+            }
+          }
+        ],
+        "tags": [
+          "LoanService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "LoanServiceRenewBody": {
+      "type": "object",
+      "properties": {
+        "extendDays": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of days the due date is pushed forward."
+        }
+      }
+    },
+    "LoanServiceReturnBody": {
+      "type": "object"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1BorrowRequest": {
+      "type": "object",
+      "properties": {
+        "readerId": {
+          "type": "string",
+          "description": "The reader the copy is lent to. A reader may borrow only for own account;\na librarian may borrow for any reader."
+        },
+        "bookId": {
+          "type": "string"
+        }
+      }
+    },
+    "v1BorrowResponse": {
+      "type": "object",
+      "properties": {
+        "loan": {
+          "$ref": "#/definitions/v1Loan"
+        }
+      }
+    },
+    "v1ListOverdueResponse": {
+      "type": "object",
+      "properties": {
+        "loans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Loan"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1ListResponse": {
+      "type": "object",
+      "properties": {
+        "loans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Loan"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1Loan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "readerId": {
+          "type": "string"
+        },
+        "bookId": {
+          "type": "string"
+        },
+        "copyId": {
+          "type": "string"
+        },
+        "borrowedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dueAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "returnedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Absent while the copy is still out."
+        },
+        "status": {
+          "$ref": "#/definitions/v1LoanStatus"
+        }
+      },
+      "description": "Loan is the aggregate root of the lending domain. It records who borrowed\nwhich copy of which book, for how long and when it came back."
+    },
+    "v1LoanStatus": {
+      "type": "string",
+      "enum": [
+        "LOAN_STATUS_UNSPECIFIED",
+        "LOAN_STATUS_ACTIVE",
+        "LOAN_STATUS_RETURNED",
+        "LOAN_STATUS_OVERDUE"
+      ],
+      "default": "LOAN_STATUS_UNSPECIFIED",
+      "description": "Lifecycle state of a loan.\n\n - LOAN_STATUS_ACTIVE: The copy is out and the due date has not passed yet.\n - LOAN_STATUS_RETURNED: The copy came back.\n - LOAN_STATUS_OVERDUE: The copy is out and the due date has passed. Derived from due_at, it is\nnever stored: a background job would only have to keep it in sync."
+    },
+    "v1RenewResponse": {
+      "type": "object",
+      "properties": {
+        "loan": {
+          "$ref": "#/definitions/v1Loan"
+        }
+      }
+    },
+    "v1ReturnResponse": {
+      "type": "object",
+      "properties": {
+        "loan": {
+          "$ref": "#/definitions/v1Loan"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "description": "Session token returned by the user-service Login, sent as 'Bearer \u003ctoken\u003e'.",
+      "name": "authorization",
+      "in": "header"
+    }
+  }
+}
