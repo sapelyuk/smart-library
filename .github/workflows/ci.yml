@@ -53,6 +53,10 @@ jobs:
         run: go build ./...
         working-directory: services/user-service
 
+      - name: Build loan-service
+        run: go build ./...
+        working-directory: services/loan-service
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -71,6 +75,22 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U library -d library_books_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      # A second instance for loan-service. Every service owns its own schema,
+      # so the two storage test suites must not share schema_migrations: both
+      # services ship a migration version 001 with different content.
+      postgres-loan:
+        image: postgres:17
+        env:
+          POSTGRES_USER: library
+          POSTGRES_PASSWORD: library
+          POSTGRES_DB: library_loans_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U library -d library_loans_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -111,6 +131,18 @@ jobs:
         if: always()
         run: go tool cover -func=coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
         working-directory: services/user-service
+
+      # The loan storage suite runs against its own database instance.
+      - name: Test loan-service
+        run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic
+        working-directory: services/loan-service
+        env:
+          POSTGRES_TEST_DSN: host=localhost port=5433 user=library password=library dbname=library_loans_test sslmode=disable
+
+      - name: Coverage report (loan-service)
+        if: always()
+        run: go tool cover -func=coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
+        working-directory: services/loan-service
 
       - name: Test api-gateway
         run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic
