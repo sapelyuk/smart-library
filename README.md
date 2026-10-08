@@ -110,7 +110,7 @@ Smart Library AI является **первоклассным компонен�
 
 | Компонент                                             | Состояние                                              |
 |-------------------------------------------------------|--------------------------------------------------------|
-| Общий `pkg/` (logger, config, migrate)                | готово                                                 |
+| Общий `pkg/` (logger, config, migrate, events)        | готово                                                 |
 | Book Service (proto, domain, service, repository, handler, server) | готово, хранилище **PostgreSQL** (PG 17 + `pgx/v5`) |
 | Book Service REST + Swagger UI (grpc-gateway, `:8091`) | готово                                                |
 | Book Service PostgreSQL repository                     | готово — `#9` (PG 17 + `pgx/v5`): миграции при старте, `FOR UPDATE SKIP LOCKED`, тесты против PG |
@@ -121,7 +121,8 @@ Smart Library AI является **первоклассным компонен�
 | Контейнеризация (multi-stage Dockerfile + compose)    | готово — `#6` (PR #39); сервисы + 4 БД + RabbitMQ в `docker-compose.yml`, healthcheck `GET /healthz` |
 | CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book- и loan-service идут против сервис-контейнера `postgres:17` |
 | OpenAPI/Swagger из proto-аннотаций                    | готово: `grpc-gateway` генерирует REST-маршруты и `swagger.json` (embed в сервисы) |
-| Брокер сообщений: выбор и локальная инфраструктура    | готово: ADR-0001 (RabbitMQ), `docker-compose.yml`; реализация продюсеров/консьюмеров — `#14` |
+| Событийная шина (`pkg/events` + RabbitMQ-транспорт)   | готово — `#14`: брокер-агностичные порты `Publisher`/`Subscriber`, конверт события (schema version), `pkg/events/amqp` (topic exchange, publisher confirms, ручной ack, reconnect, TTL+DLX), env-конфиг `RABBITMQ_URL`/`RABBITMQ_EXCHANGE` |
+| Продюсеры/консьюмеры доменных событий                 | готово — `#14`: user-service публикует `user.registered`/`user.status.changed`/`user.session.created`; консьюмер-заготовка уведомлений (`internal/consumer`) до `#48`; loan-service пока на `LogPublisher` |
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | не начато — `#23`; архитектура — ADR-0002              |
@@ -218,6 +219,8 @@ proto-пакеты), поэтому его Dockerfile копирует исхо�
 
 
 Учётные данные брокера берутся из `RABBITMQ_USER`/`RABBITMQ_PASS` (по умолчанию `guest`).
+Сервисы подключаются к брокеру по `RABBITMQ_URL` (по умолчанию `amqp://guest:guest@localhost:5672/`),
+доменные события идут в topic exchange `RABBITMQ_EXCHANGE` (по умолчанию `library.events`) — см. `pkg/events`.
 Векторная БД `ai-rag-db` (pgvector) настраивается через `AI_RAG_DB_USER`/`AI_RAG_DB_PASSWORD`/`AI_RAG_DB_NAME`
 (по умолчанию `bookrag`), схема применяется из `services/ai-service/rag/db/`. Быстрый старт RAG-прототипа —
 в `services/ai-service/rag/README.md`.
@@ -244,7 +247,7 @@ smart-library/
 ├── tools/
 │   └── protoc/          # локальный protoc 36.2
 ├── internal/            # артефакт до реструктуризации #19 (не импортируется; кандидат на удаление)
-├── pkg/                 # общие библиотеки (config, logger, migrate)
+├── pkg/                 # общие библиотеки (config, logger, migrate, events + amqp-транспорт)
 └── services/
     ├── api-gateway/     # реализован (#10): gRPC-аутентификация через user-service, маршрутизация запросов к book/user сервисам, порт :8080
     ├── book-service/    # реализован, см. services/book-service/README.md
@@ -261,7 +264,7 @@ smart-library/
     │   ├── proto/user/v1/
     │   ├── gen/go/      # генерация, не править руками
     │   ├── docs/        # swagger.json (генерация) + обёртка go:embed
-    │   ├── internal/    # domain, security, repository (postgres), service, handler
+    │   ├── internal/    # domain, security, events, consumer, repository (postgres), service, handler
     │   └── migrations/
     ├── loan-service/    # реализован (#49), см. services/loan-service/README.md
     │   ├── Dockerfile   # multi-stage образ (контекст сборки — корень репозитория)
