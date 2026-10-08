@@ -14,8 +14,9 @@ ARG BIN_NAME=loan-service
 # The loan module replaces three sibling modules: pkg, book-service and
 # user-service, because it imports their generated proto packages. Every replace
 # target has to exist at the path the directive names before `go mod download`
-# runs, otherwise Go cannot resolve the build list. The paths mirror the layout
-# of the repository, so `../book-service` from /src lands on /book-service.
+# runs, otherwise Go cannot resolve the build list (each of them now carries its
+# own go.sum). The paths mirror the layout of the repository, so
+# `../book-service` from /src lands on /book-service.
 COPY pkg/ /pkg/
 COPY services/book-service/go.mod services/book-service/go.sum /book-service/
 COPY services/user-service/go.mod services/user-service/go.sum /user-service/

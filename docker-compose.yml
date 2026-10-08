@@ -135,6 +135,8 @@ services:
     depends_on:
       user-db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     ports:
       - "8082:8082"  # gRPC API
       - "8092:8092"  # REST + Swagger + /healthz
@@ -145,6 +147,8 @@ services:
       # Inside the compose network the database is reachable by its service
       # name, not 127.0.0.1.
       USER_SERVICE_DB_DSN: host=user-db port=5432 user=${USER_SERVICE_DB_USER:-library} password=${USER_SERVICE_DB_PASSWORD:-library} dbname=${USER_SERVICE_DB_NAME:-library_users} sslmode=disable
+      # Domain events are published to RabbitMQ (ADR-0001).
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
       USER_SERVICE_SEED_LIBRARIAN_EMAIL: ${USER_SERVICE_SEED_LIBRARIAN_EMAIL:-}
       USER_SERVICE_SEED_LIBRARIAN_PASSWORD: ${USER_SERVICE_SEED_LIBRARIAN_PASSWORD:-}
     restart: unless-stopped
