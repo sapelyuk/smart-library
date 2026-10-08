@@ -94,6 +94,21 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+      # RabbitMQ for the pkg/events transport integration test. The test is
+      # skipped when RABBITMQ_TEST_URL is not set, so the other modules are
+      # unaffected by this service.
+      rabbitmq:
+        image: rabbitmq:4-management
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       POSTGRES_TEST_DSN: host=localhost port=5432 user=library password=library dbname=library_books_test sslmode=disable
     steps:
@@ -113,6 +128,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-${{ env.GO_VERSION }}-
             ${{ runner.os }}-go-
+
+      # The transport integration test runs against the RabbitMQ service above.
+      - name: Test pkg
+        run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic
+        working-directory: pkg
+        env:
+          RABBITMQ_TEST_URL: amqp://guest:guest@localhost:5672/
+
+      - name: Coverage report (pkg)
+        if: always()
+        run: go tool cover -func=coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
+        working-directory: pkg
 
       - name: Test book-service
         run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic

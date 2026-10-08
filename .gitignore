@@ -12,6 +12,9 @@ bin/
 # Local run logs captured when starting the services.
 *.log
 
+# Coverage output (go test -coverprofile=coverage.txt, see .github/workflows/ci.yml).
+coverage.txt
+
 # Environment overrides (machine-specific secrets, never committed).
 # .env.example is a tracked template and must stay in the repository.
 .env

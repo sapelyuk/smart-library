@@ -18,8 +18,8 @@ ENV GOWORK=off
 ARG MODULE=services/user-service
 ARG BIN_NAME=user-service
 
-# Copy the shared pkg module first. It has no dependencies of its own (no
-# go.sum), and it changes far less often than the services, so this layer
+# Copy the shared pkg module first. It is a separate module with its own
+# go.sum, and it changes far less often than the services, so this layer
 # stays cached across service rebuilds. The service's replace directive in
 # go.mod points at /pkg, so the module must exist before `go mod download`.
 COPY pkg/ /pkg/
