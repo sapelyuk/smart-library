@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/sapelyuk/smart-library/services/user-service/internal/domain"
+	"github.com/sapelyuk/smart-library/services/user-service/internal/events"
 	"github.com/sapelyuk/smart-library/services/user-service/internal/repository"
 	"github.com/sapelyuk/smart-library/services/user-service/internal/security"
 )
@@ -33,6 +34,7 @@ const (
 type Service struct {
 	users      repository.UserRepository
 	sessions   repository.SessionRepository
+	events     events.Publisher
 	policy     domain.PasswordPolicy
 	hashParams security.Parameters
 	sessionTTL time.Duration
@@ -62,14 +64,19 @@ type Config struct {
 	Logger *slog.Logger
 }
 
-// New wires a service. The repositories are required, the rest has defaults.
-func New(users repository.UserRepository, sessions repository.SessionRepository, cfg Config) (*Service, error) {
+// New wires a service. The repositories and the event publisher are required,
+// the rest has defaults.
+func New(users repository.UserRepository, sessions repository.SessionRepository, publisher events.Publisher, cfg Config) (*Service, error) {
 	if users == nil {
 		return nil, errors.New("service: user repository is required")
 	}
 
 	if sessions == nil {
 		return nil, errors.New("service: session repository is required")
+	}
+
+	if publisher == nil {
+		return nil, errors.New("service: event publisher is required")
 	}
 
 	if cfg.SessionTTL <= 0 {
@@ -99,6 +106,7 @@ func New(users repository.UserRepository, sessions repository.SessionRepository,
 	return &Service{
 		users:      users,
 		sessions:   sessions,
+		events:     publisher,
 		policy:     cfg.PasswordPolicy,
 		hashParams: cfg.HashParameters,
 		sessionTTL: cfg.SessionTTL,
@@ -139,6 +147,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*domain.User,
 	}
 
 	s.log.Info("user registered", "user_id", user.ID, "role", string(user.Role))
+	s.publish(ctx, events.TypeUserRegistered, userPayload(user))
 
 	return user, nil
 }
@@ -183,6 +192,7 @@ func (s *Service) CreateUser(ctx context.Context, caller domain.Principal, in Cr
 	}
 
 	s.log.Info("user created", "user_id", user.ID, "role", string(user.Role), "by", caller.UserID)
+	s.publish(ctx, events.TypeUserRegistered, userPayload(user))
 
 	return user, nil
 }
@@ -260,6 +270,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*Credentia
 	}
 
 	s.log.Info("user logged in", "user_id", user.ID, "session_id", session.ID)
+	s.publish(ctx, events.TypeUserSessionCreated, sessionPayload(session))
 
 	return &Credentials{Token: token, Session: session, User: user}, nil
 }
@@ -390,7 +401,9 @@ func (s *Service) UpdateUser(ctx context.Context, caller domain.Principal, id uu
 
 	// The status carried by an update goes through the same rule as
 	// DeactivateUser, so the two paths cannot disagree.
-	if update.Status != nil && *update.Status != user.Status {
+	statusChanged := update.Status != nil && *update.Status != user.Status
+
+	if statusChanged {
 		if err := caller.RequireStatusChange(id); err != nil {
 			return nil, err
 		}
@@ -415,6 +428,10 @@ func (s *Service) UpdateUser(ctx context.Context, caller domain.Principal, id uu
 	}
 
 	s.log.Info("user updated", "user_id", user.ID, "by", caller.UserID)
+
+	if statusChanged {
+		s.publish(ctx, events.TypeUserStatusChanged, userPayload(user))
+	}
 
 	return user, nil
 }
@@ -522,6 +539,7 @@ func (s *Service) changeStatus(ctx context.Context, caller domain.Principal, id 
 
 	s.log.Info("user status changed",
 		"user_id", user.ID, "status", string(user.Status), "by", caller.UserID)
+	s.publish(ctx, events.TypeUserStatusChanged, userPayload(user))
 
 	return user, nil
 }
@@ -584,6 +602,37 @@ func (s *Service) newUser(email, hash, fullName, phone string, role domain.Role)
 	user.UpdatedAt = now
 
 	return user, nil
+}
+
+// publish sends a domain event. Publishing is best effort: the account is
+// already written and a broker that is down must not fail the operation, so the
+// error is logged and the use case carries on.
+func (s *Service) publish(ctx context.Context, eventType string, payload any) {
+	if err := s.events.Publish(ctx, eventType, payload); err != nil {
+		s.log.ErrorContext(ctx, "cannot publish a domain event",
+			"event_type", eventType, "error", err)
+	}
+}
+
+// userPayload renders the public fields of an account. The password hash is
+// deliberately left out.
+func userPayload(user *domain.User) events.UserPayload {
+	return events.UserPayload{
+		UserID: user.ID.String(),
+		Email:  string(user.Email),
+		Role:   string(user.Role),
+		Status: string(user.Status),
+	}
+}
+
+// sessionPayload renders the identifiers of a freshly created session. The token
+// itself never leaves the response that carried it.
+func sessionPayload(session *domain.Session) events.SessionPayload {
+	return events.SessionPayload{
+		UserID:    session.UserID.String(),
+		SessionID: session.ID.String(),
+		ExpiresAt: session.ExpiresAt.UTC(),
+	}
 }
 
 func normalizeLimit(limit int) int {

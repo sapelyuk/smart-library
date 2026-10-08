@@ -21,6 +21,8 @@ user-service/
 ├── internal/
 │   ├── domain/            # User, Role, UserStatus, Email, пароли, Session, Principal (RBAC)
 │   ├── security/          # argon2id-хеширование (PHC-формат), генерация/хеширование токенов
+│   ├── events/            # порт событий (Publisher) и типы/полезные нагрузки событий
+│   ├── consumer/          # консьюмер-заготовка уведомлений (до Notification Service, #48)
 │   ├── service/           # use-case'ы: регистрация, вход, RBAC-проверки, отзыв сессий
 │   ├── repository/        # порты UserRepository/SessionRepository
 │   │   └── postgres/      # реализация на database/sql + lib/pq
@@ -78,6 +80,29 @@ docker compose up -d user-db
 
 DSN для `.env`: `host=127.0.0.1 port=5432 user=library password=library dbname=library_users sslmode=disable`.
 
+## События
+
+Сервис публикует доменные события в RabbitMQ через общий модуль `pkg/events`
+(транспорт — `pkg/events/amqp`, ADR-0001). Событие уходит в topic exchange
+`library.events` (переменная `RABBITMQ_EXCHANGE`) под routing key, равным типу
+события; тело — JSON-конверт `{event_id, event_type, occurred_at,
+schema_version, payload}`.
+
+| Тип события | Когда публикуется | payload |
+| --- | --- | --- |
+| `user.registered` | создан аккаунт (`Register` или `CreateUser`) | `user_id`, `email`, `role`, `status` |
+| `user.status.changed` | аккаунт активирован/заблокирован | `user_id`, `email`, `role`, `status` |
+| `user.session.created` | вход выдал сессию | `user_id`, `session_id`, `expires_at` |
+
+Публикация — best effort: ошибка брокера логируется, но не отменяет бизнес-операцию
+(аккаунт уже записан). Транспорт соединяется лениво и переподключается сам, поэтому
+недоступный на старте RabbitMQ не мешает сервису подняться.
+
+Пока нет отдельного Notification Service (Issue #48), роль консьюмера-заготовки
+играет `internal/consumer`: он читает `user.#` из durable-очереди
+`user.notifications.stub` и логирует события. Это держит путь подписки
+(привязка, ручной `ack`, переподключение) рабочим до появления настоящего сервиса.
+
 ## Запуск
 
 Перед запуском скопируйте корневой `.env.example` в `.env` и заполните реальные
@@ -105,6 +130,8 @@ go run ./cmd/server
 | `USER_SERVICE_HTTP_ADDR` | `:8092` | адрес REST/Swagger-сервера |
 | `USER_SERVICE_DB_DSN` | *(обязательна)* | строка подключения PostgreSQL (Docker: `localhost:5432`) |
 | `USER_SERVICE_DB_MIGRATE` | `true` | применять миграции при старте |
+| `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672/` | AMQP-строка подключения брокера |
+| `RABBITMQ_EXCHANGE` | `library.events` | topic exchange доменных событий |
 | `USER_SERVICE_SESSION_TTL` | `24h` | срок жизни bearer-токена |
 | `USER_SERVICE_PASSWORD_MIN_LENGTH` | `12` | минимальная длина пароля |
 | `USER_SERVICE_PURGE_INTERVAL` | `15m` | как часто удалять просроченные сессии |
@@ -245,9 +272,10 @@ go test ./...
 
 ## Ограничения текущей версии
 
-- Unit- и интеграционных тестов пока нет (в отличие от book-service) —
-  домен, сервис и postgres-слой проверены ручной проверкой живого API.
+- Покрыты домен, security и HTTP-слой; сервис и postgres-слой пока без тестов —
+  проверяются ручной проверкой живого API.
 - Драйвер `lib/pq` вместо `pgx` — на PG 17 переход разблокирован (Issue #32).
 - Нет аутентификации mTLS между сервисами: `AuthenticateToken` рассчитан на
   доверенную сеть.
-- Событий (NATS/Kafka) пока нет — другие сервисы используют только gRPC.
+- Консьюмер уведомлений — заготовка (`internal/consumer`): реальная доставка
+  появится в Notification Service (Issue #48).
