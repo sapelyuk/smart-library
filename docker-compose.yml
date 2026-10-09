@@ -232,6 +232,54 @@ services:
       GATEWAY_LOG_FORMAT: ${GATEWAY_LOG_FORMAT:-json}
     restart: unless-stopped
 
+  # AI Service — Go-адаптер рекомендательного сервиса (ADR-0002).
+  # Отвечает на GenerateRecommendations через RAG-воркфлоу (n8n), ведёт
+  # pgvector-индекс каталога и потребляет события book.* из RabbitMQ.
+  # RAG-прототип живёт в services/ai-service/rag/ (схема — rag/db/init.sql).
+  ai-service:
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile
+    image: library/ai-service:local
+    container_name: library-ai-service
+    hostname: library-ai-service
+    depends_on:
+      ai-rag-db:
+        condition: service_healthy
+      book-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8085:8085"  # gRPC API
+      - "8095:8095"  # REST + Swagger + /healthz
+    environment:
+      AI_GRPC_ADDR: ":8085"
+      AI_HTTP_ADDR: ":8095"
+      AI_LOG_LEVEL: ${AI_LOG_LEVEL:-info}
+      AI_LOG_FORMAT: ${AI_LOG_FORMAT:-json}
+      AI_CATALOG_GRPC_ADDR: book-service:8081
+      AI_USER_GRPC_ADDR: user-service:8082
+      # RAG workflow (n8n). Without a key the service still starts and answers
+      # unavailable — the store and the catalog keep working.
+      AI_N8N_BASE_URL: ${AI_N8N_BASE_URL:-http://host.docker.internal:5678}
+      AI_N8N_HEADER_NAME: ${AI_N8N_HEADER_NAME:-x-book-rag-key}
+      AI_N8N_HEADER_VALUE: ${AI_N8N_HEADER_VALUE:-}
+      # pgvector store: inside the compose network the database is reachable by
+      # its service name, on the internal port 5432.
+      AI_RAG_STORE_DSN: host=ai-rag-db port=5432 user=${AI_RAG_DB_USER:-bookrag} password=${AI_RAG_DB_PASSWORD:-bookrag} dbname=${AI_RAG_DB_NAME:-bookrag} sslmode=disable
+      AI_EMBEDDINGS_BASE_URL: ${AI_EMBEDDINGS_BASE_URL:-}
+      AI_EMBEDDINGS_API_KEY: ${AI_EMBEDDINGS_API_KEY:-}
+      AI_EMBEDDINGS_MODEL: ${AI_EMBEDDINGS_MODEL:-gemini-embedding-001}
+      AI_EMBEDDINGS_DIMENSIONS: ${AI_EMBEDDINGS_DIMENSIONS:-3072}
+      # Catalog consumer: defaults to the platform broker.
+      AI_CONSUMER_ENABLED: ${AI_CONSUMER_ENABLED:-true}
+      AI_RABBITMQ_URL: ${AI_RABBITMQ_URL:-amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/}
+      AI_RABBITMQ_EXCHANGE: ${AI_RABBITMQ_EXCHANGE:-}
+    restart: unless-stopped
+
 volumes:
   rabbitmq-data:
   ai-rag-db-data:

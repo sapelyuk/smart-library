@@ -164,10 +164,10 @@ Go-модуль `services/notification-service` на диске **отсутст
 | Notification Service | не начато; заведена задача #48 (напоминания о сроках, консьюмер `loan.*`) |
 | gRPC-клиенты между сервисами, события, discovery | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); discovery: ADR-0003 (Kubernetes DNS); брокер: ADR-0001 (RabbitMQ); реализация событий — #14 (готово) |
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28); в test-джобе RabbitMQ-сервис для интеграционного теста `pkg/events` |
-| Контейнеризация | готово: multi-stage Dockerfile для book-, user- и loan-service, сервисы и БД в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6) |
+| Контейнеризация | готово: multi-stage Dockerfile для book-, user-, loan- и ai-service, сервисы и БД в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6) |
 | Событийная шина | ADR-0001 (RabbitMQ); локальный RabbitMQ в `docker-compose.yml`; `pkg/events` + amqp-транспорт готовы (issue #14); user-service публикует события, консьюмер-заготовка уведомлений до #48 |
 | AI Service: RAG-прототип | **работает end-to-end**: n8n + pgvector + Gemini, 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` (#22). Оценка качества: `evals/rag-eval-suite.json` (21 вопрос: taste/self/author/genre/constraint/refuse) + `scripts/eval-rag.ps1` + `scripts/eval_metrics.py` + `tests/` (53 offline-теста, pytest), метрики precision@k/recall@k/hit@k/MRR, офлайн-валидация набора без сети и API-ключей (`-ValidateOnly`) |
-| AI Service: Go-адаптер `ai.v1.AiService` | не начато (issue #23); архитектура — ADR-0002; pgvector в `docker-compose.yml` (`ai-rag-db`, `:5433`) |
+| AI Service: Go-адаптер `ai.v1.AiService` | **готово** (issue #23): gRPC/REST (`:8085`/`:8095`), n8n-клиент, pgvector-хранилище, консьюмер `book.*` из RabbitMQ; архитектура — ADR-0002 |
 
 ## Ключевые файлы
 
@@ -212,13 +212,14 @@ Go-модуль `services/notification-service` на диске **отсутст
 | --- | --- | --- |
 | Сборка | `go build ./...` | `book-service/`, `user-service/`, `loan-service/`, `pkg/` |
 | Статический анализ | `go vet ./...` | `book-service/`, `user-service/`, `loan-service/`, `pkg/` |
-| Форматирование | `gofmt -l .` (список), `gofmt -w .` (править) | `book-service/`, `user-service/`, `loan-service/`, `pkg/` |
-| Тесты | `go test ./...` | `book-service/`, `user-service/`, `loan-service/`, `pkg/` |
+| Форматирование | `gofmt -l .` (список), `gofmt -w .` (править) | `book-service/`, `user-service/`, `loan-service/`, `ai-service/`, `pkg/` |
+| Тесты | `go test ./...` | `book-service/`, `user-service/`, `loan-service/`, `ai-service/`, `pkg/` |
 | Запуск Book Service | `go run ./cmd/server` (gRPC на `:8081`, REST + Swagger на `:8091`), нужен `BOOK_SERVICE_DB_DSN` (`docker compose up -d book-db`) | `book-service/` |
 | Запуск User Service | `go run ./cmd/server` (gRPC на `:8082`, REST + Swagger на `:8092`), нужна PostgreSQL (`docker compose up -d user-db`) | `user-service/` |
 | Запуск Loan Service | `go run ./cmd/server` (gRPC на `:8083`, REST + Swagger на `:8093`), нужны `LOAN_SERVICE_DB_DSN` (`docker compose up -d loan-db`), запущенные book- и user-service | `loan-service/` |
+| Запуск AI Service | `go run ./cmd/server` (gRPC на `:8085`, REST + Swagger на `:8095`), нужны `AI_CATALOG_GRPC_ADDR`, `AI_USER_GRPC_ADDR`, `AI_RAG_STORE_DSN`, `AI_N8N_BASE_URL`, `AI_N8N_HEADER_VALUE`; без n8n ответы `UNAVAILABLE` | `ai-service/` |
 | Генерация gRPC-кода | `./scripts/gen_proto.ps1` | корень (PowerShell) |
-| Полный стек в Docker | `docker compose up -d --build` (book/user/loan-service + book-db `:5434` + user-db `:5432` + loan-db `:5435` + pgvector `:5433` + RabbitMQ `:5672`/`:15672`), `docker compose down -v` | корень |
+| Полный стек в Docker | `docker compose up -d --build` (book/user/loan/ai-service + book-db `:5434` + user-db `:5432` + loan-db `:5435` + pgvector `:5433` + RabbitMQ `:5672`/`:15672`), `docker compose down -v` | корень |
 | Инфраструктура без сервисов | `docker compose up -d rabbitmq user-db book-db loan-db ai-rag-db` | корень |
 
 Текущее состояние проверок (последний запуск): build/vet — чисто во всех модулях; тесты — `book-service` (домен, сервис, postgres-репозиторий против PostgreSQL, HTTP-слой), `user-service` (49 тестов + 127 подтестов: домен, security, HTTP-слой), `loan-service` (домен, auth-интерцептор, сервис с моками, postgres-репозиторий против PostgreSQL, HTTP-слой) и `pkg` (конверт/конфиг/publisher + интеграционный тест amqp-транспорта). Pg-тесты `book-service` и `loan-service` пропускаются без `POSTGRES_TEST_DSN`; локально — `docker compose up -d book-db loan-db`, затем `POSTGRES_TEST_DSN='host=localhost port=5434 user=library password=library dbname=library_books sslmode=disable'` (book) и `... port=5435 ... dbname=library_loans ...` (loan). Интеграционный тест `pkg/events/amqp` пропускается без `RABBITMQ_TEST_URL`; локально — `docker compose up -d rabbitmq`, затем `RABBITMQ_TEST_URL='amqp://guest:guest@localhost:5672/'` и `go test ./events/...` из `pkg/`.

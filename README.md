@@ -125,7 +125,7 @@ Smart Library AI является **первоклассным компонен�
 | Продюсеры/консьюмеры доменных событий                 | готово — `#14`: user-service публикует `user.registered`/`user.status.changed`/`user.session.created`; консьюмер-заготовка уведомлений (`internal/consumer`) до `#48`; loan-service пока на `LogPublisher` |
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
-| AI Service: Go-адаптер `ai.v1.AiService`              | не начато — `#23`; архитектура — ADR-0002              |
+| AI Service: Go-адаптер `ai.v1.AiService`              | **готово** — `#23`: gRPC/REST (`:8085`/`:8095`), клиент n8n-webhook (без генерации вне RAG), хранилище pgvector (`pgx/v5`), консьюмер `book.*` из RabbitMQ, Dockerfile + контейнер в `docker-compose.yml`; архитектура — ADR-0002 |
 | Notification Service                                   | не начато — `#48`                                      |
 | API Gateway                                            | готово — `#10` (gRPC-аутентификация через user-service, маршрутизация по пути, Dockerfile) |
 | Межсервисные gRPC-клиенты, discovery                  | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); gateway — user-service; discovery — `#8` |
@@ -160,6 +160,22 @@ export LOAN_SERVICE_DB_DSN='host=localhost port=5435 user=library password=libra
 export LOAN_SERVICE_BOOK_SERVICE_GRPC_ADDR='localhost:8081'
 export LOAN_SERVICE_USER_SERVICE_GRPC_ADDR='localhost:8082'
 go run ./cmd/server     # gRPC на :8083, REST + Swagger на :8093
+```
+
+Локальный запуск AI Service (нужны база pgvector — поднимается через
+`docker compose up -d ai-rag-db`, и запущенный n8n c RAG-цепочкой; обязательные
+переменные `AI_CATALOG_GRPC_ADDR`, `AI_USER_GRPC_ADDR`, `AI_N8N_BASE_URL`,
+`AI_N8N_HEADER_VALUE`, `AI_RAG_STORE_DSN` — см. `internal/config/config.go`;
+без n8n ответы не генерируются — сервис отвечает `UNAVAILABLE`):
+
+```bash
+cd services/ai-service
+export AI_CATALOG_GRPC_ADDR='localhost:8081'
+export AI_USER_GRPC_ADDR='localhost:8082'
+export AI_N8N_BASE_URL='http://localhost:5678/webhook/rag'
+export AI_N8N_HEADER_VALUE='<ключ RAG-цепочки>'
+export AI_RAG_STORE_DSN='host=localhost port=5433 user=bookrag password=bookrag dbname=bookrag sslmode=disable'
+go run ./cmd/server     # gRPC на :8085, REST + Swagger на :8095
 ```
 
 Сборка / проверка / тесты (из директории модуля, не из корня репозитория):
