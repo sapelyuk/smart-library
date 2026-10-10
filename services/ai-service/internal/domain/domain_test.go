@@ -6,18 +6,18 @@ import (
 	"testing"
 )
 
-// TestNewQuery_PustoyVoprosпроверяет, что пустой или пробельный вопрос
-// отклоняется с ErrEmptyQuery.
+// TestNewQuery_Empty checks that an empty or whitespace-only query is rejected
+// with ErrEmptyQuery.
 func TestNewQuery_Empty(t *testing.T) {
 	for _, raw := range []string{"", "   ", "\n\t "} {
 		_, err := NewQuery(raw, "", 0)
 		if !errors.Is(err, ErrEmptyQuery) {
-			t.Fatalf("NewQuery(%q) error = %v, хотим ErrEmptyQuery", raw, err)
+			t.Fatalf("NewQuery(%q) error = %v, want ErrEmptyQuery", raw, err)
 		}
 	}
 }
 
-// TestNewQuery_Trim проверяет, что пробелы по краям текста срезаются.
+// TestNewQuery_Trim checks that leading and trailing spaces are trimmed from the text.
 func TestNewQuery_Trim(t *testing.T) {
 	q, err := NewQuery("  Где книга про DDD?  ", "", 0)
 	if err != nil {
@@ -25,34 +25,34 @@ func TestNewQuery_Trim(t *testing.T) {
 	}
 
 	if q.Text != "Где книга про DDD?" {
-		t.Fatalf("Text = %q, хотим %q", q.Text, "Где книга про DDD?")
+		t.Fatalf("Text = %q, want %q", q.Text, "Где книга про DDD?")
 	}
 }
 
-// TestNewQuery_TooLong проверяет, что вопрос длиннее MaxQueryRunes
-// отклоняется с ErrQueryTooLong.
+// TestNewQuery_TooLong checks that a query longer than MaxQueryRunes is rejected
+// with ErrQueryTooLong.
 func TestNewQuery_TooLong(t *testing.T) {
 	long := strings.Repeat("a", MaxQueryRunes+1)
 
 	_, err := NewQuery(long, "", 0)
 	if !errors.Is(err, ErrQueryTooLong) {
-		t.Fatalf("NewQuery() error = %v, хотим ErrQueryTooLong", err)
+		t.Fatalf("NewQuery() error = %v, want ErrQueryTooLong", err)
 	}
 }
 
-// TestNewQuery_LimitBounds проверяет, что limit=0 заменяется DefaultLimit,
-// а limit>MaxLimit ограничивается MaxLimit.
+// TestNewQuery_LimitBounds checks that limit=0 is replaced with DefaultLimit
+// and limit>MaxLimit is clamped to MaxLimit.
 func TestNewQuery_LimitBounds(t *testing.T) {
 	tests := []struct {
 		name  string
 		limit int
 		want  int
 	}{
-		{"ноль заменяется default", 0, DefaultLimit},
-		{"отрицательный заменяется default", -5, DefaultLimit},
-		{"в пределах остаётся как есть", 7, 7},
-		{"выше cap ограничивается cap", MaxLimit + 1, MaxLimit},
-		{"ровно cap принимается", MaxLimit, MaxLimit},
+		{"zero replaced with default", 0, DefaultLimit},
+		{"negative replaced with default", -5, DefaultLimit},
+		{"in range kept as is", 7, 7},
+		{"above cap clamped to cap", MaxLimit + 1, MaxLimit},
+		{"exactly cap accepted", MaxLimit, MaxLimit},
 	}
 
 	for _, tt := range tests {
@@ -63,19 +63,19 @@ func TestNewQuery_LimitBounds(t *testing.T) {
 			}
 
 			if q.Limit != tt.want {
-				t.Fatalf("Limit = %d, хотим %d", q.Limit, tt.want)
+				t.Fatalf("Limit = %d, want %d", q.Limit, tt.want)
 			}
 		})
 	}
 }
 
-// TestNewQuery_SessionIDValid проверяет, что допустимые символы в session id
-// принимаются, а недопустимые отклоняются с ErrInvalidSessionID.
+// TestNewQuery_SessionID checks that valid characters in a session id are
+// accepted and invalid ones are rejected with ErrInvalidSessionID.
 func TestNewQuery_SessionID(t *testing.T) {
 	valid := []string{"", "abc-123_X.y", "A"}
 	for _, sid := range valid {
 		if _, err := NewQuery("valid question", sid, 0); err != nil {
-			t.Fatalf("session id %q отклонён: %v", sid, err)
+			t.Fatalf("session id %q rejected: %v", sid, err)
 		}
 	}
 
@@ -83,12 +83,12 @@ func TestNewQuery_SessionID(t *testing.T) {
 	for _, sid := range invalid {
 		_, err := NewQuery("valid question", sid, 0)
 		if !errors.Is(err, ErrInvalidSessionID) {
-			t.Fatalf("session id %q принят, хотим ErrInvalidSessionID (получили %v)", sid, err)
+			t.Fatalf("session id %q accepted, want ErrInvalidSessionID (got %v)", sid, err)
 		}
 	}
 }
 
-// TestSource_String проверяет читаемое представление источника ответа.
+// TestSource_String checks the human-readable representation of the answer source.
 func TestSource_String(t *testing.T) {
 	tests := []struct {
 		src  Source
@@ -102,13 +102,13 @@ func TestSource_String(t *testing.T) {
 
 	for _, tt := range tests {
 		if got := tt.src.String(); got != tt.want {
-			t.Fatalf("Source(%d).String() = %q, хотим %q", tt.src, got, tt.want)
+			t.Fatalf("Source(%d).String() = %q, want %q", tt.src, got, tt.want)
 		}
 	}
 }
 
-// TestParseBookID_ValidUUID проверяет, что корректный UUID возвращается
-// в канонической форме, а некорректный — с ErrInvalidBookID.
+// TestParseBookID checks that a valid UUID is returned in canonical form and
+// an invalid one is rejected with ErrInvalidBookID.
 func TestParseBookID(t *testing.T) {
 	const id = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 
@@ -118,19 +118,19 @@ func TestParseBookID(t *testing.T) {
 	}
 
 	if got != id {
-		t.Fatalf("ParseBookID() = %q, хотим %q", got, id)
+		t.Fatalf("ParseBookID() = %q, want %q", got, id)
 	}
 
 	for _, raw := range []string{"", "not-a-uuid", "123"} {
 		_, err := ParseBookID(raw)
 		if !errors.Is(err, ErrInvalidBookID) {
-			t.Fatalf("ParseBookID(%q) error = %v, хотим ErrInvalidBookID", raw, err)
+			t.Fatalf("ParseBookID(%q) error = %v, want ErrInvalidBookID", raw, err)
 		}
 	}
 }
 
-// TestCatalogBook_Validate проверяет, что книга без ID или без названия
-// не индексируется.
+// TestCatalogBook_Validate checks that a book without an ID or without a title
+// is not indexed.
 func TestCatalogBook_Validate(t *testing.T) {
 	valid := CatalogBook{
 		ID:    "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
@@ -138,36 +138,36 @@ func TestCatalogBook_Validate(t *testing.T) {
 	}
 
 	if err := valid.Validate(); err != nil {
-		t.Fatalf("корректная книга отклонена: %v", err)
+		t.Fatalf("valid book rejected: %v", err)
 	}
 
 	noID := CatalogBook{ID: "not-uuid", Title: "X"}
 	if err := noID.Validate(); !errors.Is(err, ErrInvalidBookID) {
-		t.Fatalf("книга с некорректным ID: error = %v, хотим ErrInvalidBookID", err)
+		t.Fatalf("book with invalid ID: error = %v, want ErrInvalidBookID", err)
 	}
 
 	noTitle := CatalogBook{ID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8", Title: "   "}
 	if err := noTitle.Validate(); !errors.Is(err, ErrInvalidBookID) {
-		t.Fatalf("книга без названия: error = %v, хотим ErrInvalidBookID", err)
+		t.Fatalf("book without title: error = %v, want ErrInvalidBookID", err)
 	}
 }
 
-// TestCatalogBook_IngestText проверяет, что при пустом Content формируется
-// строка из библиографических полей, а при непустом — используется Content.
+// TestCatalogBook_IngestText checks that when Content is empty a line is built
+// from bibliographic fields, and when non-empty Content is used as is.
 func TestCatalogBook_IngestText(t *testing.T) {
-	t.Run("content имеет приоритет", func(t *testing.T) {
+	t.Run("content takes priority", func(t *testing.T) {
 		b := CatalogBook{
 			ID:      "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 			Title:   "Title",
-			Content: "  полный текст книги  ",
+			Content: "  full book text  ",
 		}
 
-		if got := b.IngestText(); got != "полный текст книги" {
-			t.Fatalf("IngestText() = %q, хотим %q", got, "полный текст книги")
+		if got := b.IngestText(); got != "full book text" {
+			t.Fatalf("IngestText() = %q, want %q", got, "full book text")
 		}
 	})
 
-	t.Run("fallback на библиографию без description", func(t *testing.T) {
+	t.Run("falls back to bibliography without description", func(t *testing.T) {
 		b := CatalogBook{
 			ID:            "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 			Title:         "Clean Architecture",
@@ -181,12 +181,12 @@ func TestCatalogBook_IngestText(t *testing.T) {
 
 		for _, want := range []string{"Clean Architecture", "Robert C. Martin", "2017", "Prentice Hall", "978-0134494166"} {
 			if !strings.Contains(got, want) {
-				t.Fatalf("IngestText() = %q, не содержит %q", got, want)
+				t.Fatalf("IngestText() = %q, does not contain %q", got, want)
 			}
 		}
 	})
 
-	t.Run("description добавляется к строке", func(t *testing.T) {
+	t.Run("description is appended to the line", func(t *testing.T) {
 		b := CatalogBook{
 			ID:          "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 			Title:       "Domain-Driven Design",
@@ -195,11 +195,11 @@ func TestCatalogBook_IngestText(t *testing.T) {
 
 		got := b.IngestText()
 		if !strings.Contains(got, "Стратегическое проектирование") {
-			t.Fatalf("IngestText() = %q, не содержит description", got)
+			t.Fatalf("IngestText() = %q, does not contain description", got)
 		}
 	})
 
-	t.Run("обрезается до MaxIngestTextRunes", func(t *testing.T) {
+	t.Run("truncated to MaxIngestTextRunes", func(t *testing.T) {
 		b := CatalogBook{
 			ID:      "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 			Title:   "X",
@@ -207,34 +207,34 @@ func TestCatalogBook_IngestText(t *testing.T) {
 		}
 
 		if got := len(b.IngestText()); got > MaxIngestTextRunes {
-			t.Fatalf("IngestText() длина %d, максимум %d", got, MaxIngestTextRunes)
+			t.Fatalf("IngestText() length %d, max %d", got, MaxIngestTextRunes)
 		}
 	})
 }
 
-// TestTruncate_RuneBoundary проверяет, что truncate режет по границе рун,
-// а не по байтам.
+// TestTruncate_RuneBoundary checks that truncate cuts on rune boundaries,
+// not bytes.
 func TestTruncate_RuneBoundary(t *testing.T) {
-	// Кириллица: 2 байта на руну.
+	// Cyrillic: 2 bytes per rune.
 	src := "Привет мир"
 
-	// max=6 рун — "Приве" без "т".
+	// max=6 runes — first 6 runes of src.
 	got := truncate(src, 6)
 	if runeLen := len([]rune(got)); runeLen > 6 {
-		t.Fatalf("truncate() вернул %d рун, хотим ≤6: %q", runeLen, got)
+		t.Fatalf("truncate() returned %d runes, want ≤6: %q", runeLen, got)
 	}
 
-	// Хвостовые пробелы срезаются.
+	// Trailing spaces are trimmed.
 	got = truncate("привет     ", 7)
 	if got != "привет" {
-		t.Fatalf("truncate() = %q, хотим %q", got, "привет")
+		t.Fatalf("truncate() = %q, want %q", got, "привет")
 	}
 }
 
-// TestTruncate_ShortString проверяет, что короткая строка возвращается как есть.
+// TestTruncate_ShortString checks that a short string is returned as is.
 func TestTruncate_ShortString(t *testing.T) {
 	src := "short"
 	if got := truncate(src, 100); got != src {
-		t.Fatalf("truncate() = %q, хотим %q", got, src)
+		t.Fatalf("truncate() = %q, want %q", got, src)
 	}
 }

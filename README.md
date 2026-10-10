@@ -9,10 +9,11 @@ AI-рекомендациями книг на LLM/RAG (RAG-прототип ра
 - **AI:** рекомендации книг через LLM/RAG как часть архитектуры, а не надстройка.
   RAG-прототип **работает от начала до конца** (n8n + pgvector + Gemini, 20 книг
   проиндексировано) — см. раздел «AI-first подход» и `services/ai-service/rag/README.md`.
-  Go-адаптер сервиса (`ai.v1.AiService`) — не начат (issue #23).
+  Go-адаптер сервиса (`ai.v1.AiService`) **готов** (issue #23): gRPC `:8085`,
+  REST + Swagger `:8095`, pgvector-хранилище, консьюмер `book.*` из RabbitMQ.
 
-Проект в активной разработке: бэкенд-сервисы и RAG-прототип работают, фронтенд и
-Go-адаптер AI-сервиса — следующие этапы.
+Проект в активной разработке: бэкенд-сервисы, RAG-прототип и Go-адаптер AI-сервиса
+работают; фронтенд и Notification Service — следующие этапы.
 
 ## Архитектура
 
@@ -41,6 +42,8 @@ Book Service дополнительно поднимает HTTP-слой для 
 | `/v1/borrow/*`    | book-service   | 8091             |
 | `/v1/users/*`     | user-service   | 8092             |
 | `/v1/auth/*`      | user-service   | 8092             |
+| `/v1/loans/*`     | loan-service   | 8093             |
+| `/v1/ai/*`        | ai-service     | 8095             |
 
 Шлюз проверяет bearer-токен через gRPC `AuthenticateToken` user-service и
 добавляет заголовок `X-Forwarded-For`. Локально запускается через
@@ -193,7 +196,7 @@ go build ./... && go vet ./... && go test ./...
 Полный стек одной командой (сборка образов сервисов + инфраструктура):
 
 ```bash
-docker compose up -d --build    # сервисы :8080/:8081/:8091/:8082/:8092/:8083/:8093 + БД + RabbitMQ
+docker compose up -d --build    # сервисы :8080/:8081/:8091/:8082/:8092/:8083/:8093/:8085/:8095 + БД + RabbitMQ
 docker compose logs -f book-service
 docker compose down -v          # остановить и удалить volume
 ```
@@ -206,13 +209,14 @@ docker compose down -v          # остановить и удалить volume
 | `book-service` | build `services/book-service/Dockerfile` | `8081` (gRPC), `8091` (REST + Swagger + `/healthz`) |
 | `user-service` | build `services/user-service/Dockerfile` | `8082` (gRPC), `8092` (REST + Swagger + `/healthz`) |
 | `loan-service` | build `services/loan-service/Dockerfile` | `8083` (gRPC), `8093` (REST + Swagger + `/healthz`) |
+| `ai-service` | build `services/ai-service/Dockerfile` | `8085` (gRPC), `8095` (REST + Swagger + `/healthz`) |
 | `book-db` | `postgres:17` | `5434` |
 | `user-db` | `postgres:17` | `5432` |
 | `loan-db` | `postgres:17` | `5435` |
 | `ai-rag-db` | `pgvector/pgvector:pg17` | `5433` |
 | `rabbitmq` | `rabbitmq:4-management` | `5672`, `15672` |
 
-Контейнеры создаются с префиксом `library-` (через `container_name` в `docker-compose.yml`): `library-api-gateway`, `library-book-service`, `library-user-service`, `library-loan-service`, `library-book-db`, `library-user-db`, `library-loan-db`, `library-ai-rag-db`, `library-rabbitmq`.
+Контейнеры создаются с префиксом `library-` (через `container_name` в `docker-compose.yml`): `library-api-gateway`, `library-book-service`, `library-user-service`, `library-loan-service`, `library-ai-service`, `library-book-db`, `library-user-db`, `library-loan-db`, `library-ai-rag-db`, `library-rabbitmq`.
 
 Все Dockerfile'ы — multi-stage (`golang:1.27-alpine` → `alpine:3.21`), собираются из **корня репозитория**:
 модули используют `replace ... => ../../pkg`, поэтому контекст сборки — корень, а не каталог сервиса.
