@@ -17,7 +17,7 @@ if (-not (Test-Path $protoc)) {
 
 $env:PATH = "$(go env GOPATH)\bin;$env:PATH"
 
-foreach ($module in @("services/book-service", "services/user-service", "services/loan-service")) {
+foreach ($module in @("services/book-service", "services/user-service", "services/loan-service", "services/ai-service")) {
     $outDir = Join-Path $root "$module/gen/go"
     $docsDir = Join-Path $root "$module/docs"
     New-Item -ItemType Directory -Force -Path $outDir, $docsDir | Out-Null

@@ -1,0 +1,167 @@
+syntax = "proto3";
+
+package ai.v1;
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/sapelyuk/smart-library/services/ai-service/gen/go/ai/v1;aiv1";
+
+// Metadata of the Swagger UI served by the HTTP interface of the service.
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "AI Service API"
+    version: "1.0"
+    description: "Book recommendations produced by the RAG pipeline behind this service (ADR-0002). REST endpoints are proxied to ai.v1.AiService over gRPC. Every method expects the header 'authorization: Bearer <token>' with the token returned by the user-service Login; reindexing methods additionally require the LIBRARIAN role."
+    contact: {name: "Smart Library"}
+  }
+  consumes: "application/json"
+  produces: "application/json"
+  security_definitions: {
+    security: {
+      key: "BearerAuth"
+      value: {
+        type: TYPE_API_KEY
+        description: "Session token returned by the user-service Login, sent as 'Bearer <token>'."
+        name: "authorization"
+        in: IN_HEADER
+      }
+    }
+  }
+};
+
+// Where a recommendation came from. The value tells the caller how much to
+// trust the answer and how much it cost: an LLM answer is grounded in the
+// catalogue but paid for, a retrieval answer is free but not phrased.
+enum RecommendationSource {
+  RECOMMENDATION_SOURCE_UNSPECIFIED = 0;
+
+  // The RAG pipeline answered: retrieved books plus a generated text.
+  RECOMMENDATION_SOURCE_GENERATED = 1;
+
+  // The pipeline produced no text, the titles were taken from retrieval only.
+  RECOMMENDATION_SOURCE_RETRIEVAL = 2;
+}
+
+// RecommendedBook is one catalogue entry the pipeline picked for the query.
+// Only identity fields travel: the caller resolves the rest through
+// book-service, which is the source of truth for the catalogue.
+message RecommendedBook {
+  string book_id = 1;
+  string title = 2;
+  string author = 3;
+}
+
+// Recommendation is the answer to one query.
+message Recommendation {
+  // The query the recommendation was produced for.
+  string query = 1;
+
+  // Natural-language answer of the pipeline, empty for a retrieval-only reply.
+  string answer = 2;
+
+  repeated RecommendedBook books = 3;
+
+  RecommendationSource source = 4;
+
+  // Conversation id to send back for a follow-up question.
+  string session_id = 5;
+}
+
+message RecommendRequest {
+  // What the reader is looking for, in free text.
+  string query = 1;
+
+  // Conversation to continue, empty starts a new one.
+  string session_id = 2;
+
+  // How many catalogue entries the answer may list, 0 means the service
+  // default (5), capped at 20.
+  int32 limit = 3;
+}
+
+message RecommendResponse {
+  Recommendation recommendation = 1;
+}
+
+message IngestBookRequest {
+  // Identifier of the book in the catalogue, the id used by book-service.
+  string book_id = 1;
+}
+
+message IngestBookResponse {
+  string book_id = 1;
+
+  // Title the record was indexed under, as read back from book-service.
+  string title = 2;
+}
+
+message DeleteBookRequest {
+  string book_id = 1;
+}
+
+message DeleteBookResponse {
+  string book_id = 1;
+
+  // False when the book was not indexed in the first place.
+  bool deleted = 2;
+}
+
+message IndexStatusRequest {}
+
+message IndexStatusResponse {
+  // Catalogue entries present in the vector store.
+  int32 indexed_books = 1;
+
+  // Chunks present in the vector store.
+  int32 indexed_chunks = 2;
+}
+
+// Book recommendations over the catalogue, plus the index maintenance the
+// catalogue synchronisation needs.
+//
+// Every RPC is also exposed as a REST endpoint through grpc-gateway, which is
+// what the Swagger UI at /swagger/ exercises. Every method refuses a request
+// without a valid bearer token with UNAUTHENTICATED; the index maintenance
+// methods additionally require the LIBRARIAN role and answer PERMISSION_DENIED
+// otherwise.
+service AiService {
+  // Answers a free-text query with recommendations from the catalogue.
+  rpc Recommend(RecommendRequest) returns (RecommendResponse) {
+    option (google.api.http) = {
+      post: "/v1/ai/recommendations"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+
+  // Reindexes one catalogue entry: the book is read from book-service and
+  // handed to the indexing pipeline again.
+  rpc IngestBook(IngestBookRequest) returns (IngestBookResponse) {
+    option (google.api.http) = {
+      post: "/v1/ai/index/books/{book_id}"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+
+  // Drops one catalogue entry from the vector store.
+  rpc DeleteBook(DeleteBookRequest) returns (DeleteBookResponse) {
+    option (google.api.http) = {delete: "/v1/ai/index/books/{book_id}"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+
+  // Reports what the vector store currently holds.
+  rpc IndexStatus(IndexStatusRequest) returns (IndexStatusResponse) {
+    option (google.api.http) = {get: "/v1/ai/index/status"};
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {security_requirement: {key: "BearerAuth"}}
+    };
+  }
+}

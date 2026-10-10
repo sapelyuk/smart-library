@@ -1,0 +1,329 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "AI Service API",
+    "description": "Book recommendations produced by the RAG pipeline behind this service (ADR-0002). REST endpoints are proxied to ai.v1.AiService over gRPC. Every method expects the header 'authorization: Bearer \u003ctoken\u003e' with the token returned by the user-service Login; reindexing methods additionally require the LIBRARIAN role.",
+    "version": "1.0",
+    "contact": {
+      "name": "Smart Library"
+    }
+  },
+  "tags": [
+    {
+      "name": "AiService",
+      "description": "Book recommendations over the catalogue, plus the index maintenance the\ncatalogue synchronisation needs.\n\nEvery RPC is also exposed as a REST endpoint through grpc-gateway, which is\nwhat the Swagger UI at /swagger/ exercises. Every method refuses a request\nwithout a valid bearer token with UNAUTHENTICATED; the index maintenance\nmethods additionally require the LIBRARIAN role and answer PERMISSION_DENIED\notherwise."
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/ai/index/books/{bookId}": {
+      "delete": {
+        "summary": "Drops one catalogue entry from the vector store.",
+        "operationId": "AiService_DeleteBook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteBookResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "bookId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AiService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Reindexes one catalogue entry: the book is read from book-service and\nhanded to the indexing pipeline again.",
+        "operationId": "AiService_IngestBook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1IngestBookResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "bookId",
+            "description": "Identifier of the book in the catalogue, the id used by book-service.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AiServiceIngestBookBody"
+            }
+          }
+        ],
+        "tags": [
+          "AiService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/ai/index/status": {
+      "get": {
+        "summary": "Reports what the vector store currently holds.",
+        "operationId": "AiService_IndexStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1IndexStatusResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "AiService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/ai/recommendations": {
+      "post": {
+        "summary": "Answers a free-text query with recommendations from the catalogue.",
+        "operationId": "AiService_Recommend",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RecommendResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RecommendRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AiService"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "AiServiceIngestBookBody": {
+      "type": "object"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1DeleteBookResponse": {
+      "type": "object",
+      "properties": {
+        "bookId": {
+          "type": "string"
+        },
+        "deleted": {
+          "type": "boolean",
+          "description": "False when the book was not indexed in the first place."
+        }
+      }
+    },
+    "v1IndexStatusResponse": {
+      "type": "object",
+      "properties": {
+        "indexedBooks": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Catalogue entries present in the vector store."
+        },
+        "indexedChunks": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Chunks present in the vector store."
+        }
+      }
+    },
+    "v1IngestBookResponse": {
+      "type": "object",
+      "properties": {
+        "bookId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title the record was indexed under, as read back from book-service."
+        }
+      }
+    },
+    "v1RecommendRequest": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "What the reader is looking for, in free text."
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "Conversation to continue, empty starts a new one."
+        },
+        "limit": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many catalogue entries the answer may list, 0 means the service\ndefault (5), capped at 20."
+        }
+      }
+    },
+    "v1RecommendResponse": {
+      "type": "object",
+      "properties": {
+        "recommendation": {
+          "$ref": "#/definitions/v1Recommendation"
+        }
+      }
+    },
+    "v1Recommendation": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "The query the recommendation was produced for."
+        },
+        "answer": {
+          "type": "string",
+          "description": "Natural-language answer of the pipeline, empty for a retrieval-only reply."
+        },
+        "books": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RecommendedBook"
+          }
+        },
+        "source": {
+          "$ref": "#/definitions/v1RecommendationSource"
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "Conversation id to send back for a follow-up question."
+        }
+      },
+      "description": "Recommendation is the answer to one query."
+    },
+    "v1RecommendationSource": {
+      "type": "string",
+      "enum": [
+        "RECOMMENDATION_SOURCE_UNSPECIFIED",
+        "RECOMMENDATION_SOURCE_GENERATED",
+        "RECOMMENDATION_SOURCE_RETRIEVAL"
+      ],
+      "default": "RECOMMENDATION_SOURCE_UNSPECIFIED",
+      "description": "Where a recommendation came from. The value tells the caller how much to\ntrust the answer and how much it cost: an LLM answer is grounded in the\ncatalogue but paid for, a retrieval answer is free but not phrased.\n\n - RECOMMENDATION_SOURCE_GENERATED: The RAG pipeline answered: retrieved books plus a generated text.\n - RECOMMENDATION_SOURCE_RETRIEVAL: The pipeline produced no text, the titles were taken from retrieval only."
+    },
+    "v1RecommendedBook": {
+      "type": "object",
+      "properties": {
+        "bookId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        }
+      },
+      "description": "RecommendedBook is one catalogue entry the pipeline picked for the query.\nOnly identity fields travel: the caller resolves the rest through\nbook-service, which is the source of truth for the catalogue."
+    }
+  },
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "description": "Session token returned by the user-service Login, sent as 'Bearer \u003ctoken\u003e'.",
+      "name": "authorization",
+      "in": "header"
+    }
+  }
+}

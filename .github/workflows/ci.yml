@@ -57,6 +57,10 @@ jobs:
         run: go build ./...
         working-directory: services/loan-service
 
+      - name: Build ai-service
+        run: go build ./...
+        working-directory: services/ai-service
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -179,3 +183,14 @@ jobs:
         if: always()
         run: go tool cover -func=coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
         working-directory: services/api-gateway
+
+      # ai-service has no PostgreSQL storage tests, so it runs without
+      # POSTGRES_TEST_DSN — only domain, auth, and handler tests.
+      - name: Test ai-service
+        run: go test ./... -race -coverprofile=coverage.txt -covermode=atomic
+        working-directory: services/ai-service
+
+      - name: Coverage report (ai-service)
+        if: always()
+        run: go tool cover -func=coverage.txt | tee -a "$GITHUB_STEP_SUMMARY"
+        working-directory: services/ai-service
