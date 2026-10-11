@@ -1,10 +1,10 @@
 // Package postgres implements the storage contracts of the user service on top
-// of PostgreSQL.
+// of PostgreSQL via pgx/v5/stdlib (database/sql driver).
 //
 // The package is the only place that knows SQL and the only one that imports a
-// driver. lib/pq is deliberate: the development server of this repository is old
-// enough that the modern drivers refuse to speak to it, and the service needs
-// nothing from a driver beyond a pool and placeholders.
+// driver. pgx/v5/stdlib is chosen because it exposes the familiar *sql.DB
+// interface while using the pgx wire protocol under the hood; it supports
+// binary parameters, COPY and LISTEN/NOTIFY and has an active pool implementation.
 //
 // A storage failure never reaches the service layer as a driver error: the
 // unique index that rejects a second registration of the same address is mapped
@@ -23,7 +23,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib" // registers the pgx database/sql driver
 
 	"github.com/sapelyuk/smart-library/services/user-service/internal/domain"
 	"github.com/sapelyuk/smart-library/services/user-service/internal/repository"
@@ -46,7 +47,7 @@ func NewStore(db *sql.DB) *Store {
 // constants because the right numbers depend on how many instances of the
 // service run against the same server.
 func Open(dsn string, maxOpenConns, maxIdleConns int, connMaxLifetime time.Duration) (*sql.DB, error) {
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: open: %w", err)
 	}
@@ -275,24 +276,24 @@ func translate(err error, email domain.Email) error {
 		return nil
 	}
 
-	var pqErr *pq.Error
-	if !errors.As(err, &pqErr) {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
 		return fmt.Errorf("postgres: %w", err)
 	}
 
-	switch pqErr.Code.Name() {
-	case "unique_violation":
+	switch pgErr.Code {
+	case "23505": // unique_violation
 		// users_email_key is the only unique index an account write can hit.
-		if strings.Contains(pqErr.Constraint, "email") {
+		if strings.Contains(pgErr.ConstraintName, "email") {
 			return fmt.Errorf("%w: %s", domain.ErrEmailAlreadyExists, email)
 		}
 
-		return fmt.Errorf("postgres: unique violation on %s: %w", pqErr.Constraint, err)
-	case "foreign_key_violation":
+		return fmt.Errorf("postgres: unique violation on %s: %w", pgErr.ConstraintName, err)
+	case "23503": // foreign_key_violation
 		// sessions_user_id_fkey is the only foreign key of the schema.
 		return domain.ErrUserNotFound
 	default:
-		return fmt.Errorf("postgres: %s: %w", pqErr.Code.Name(), err)
+		return fmt.Errorf("postgres: %s: %w", pgErr.Code, err)
 	}
 }
 

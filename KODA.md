@@ -5,7 +5,7 @@
 **Smart Library** — полнофункциональная платформа управления библиотекой: монорепо с бэкендом на Go (gRPC-микросервисы), планируемым React-приложением и AI-рекомендациями книг на LLM/RAG. Реализовано: **Book Service полностью рабочий** (gRPC-API, REST и Swagger через grpc-gateway, домен, бизнес-логика, PostgreSQL-хранилище, тесты), **User Service рабочий** (gRPC-API, REST и Swagger, регистрация/вход, хеширование паролей, сессии, ролевая модель, PostgreSQL-хранилище, миграции, unit-тесты домена и security, публикация доменных событий), **API Gateway рабочий** (единая HTTP-точка входа, маршрутизация к сервисам, gRPC-аутентификация через user-service), **Loan Service рабочий** (выдача/возврат/продление, gRPC-клиенты к book- и user-service, PostgreSQL), **AI Service рабочий** (gRPC :8085 + REST/Swagger :8095, домен, n8n-клиент, pgvector-хранилище, консьюмер `book.*` из RabbitMQ, unit-тесты домена), **RAG-прототип AI-модуля работает** (n8n + pgvector + Gemini, 20 книг проиндексировано), общий модуль `pkg` (logger, config, migrate, events) и **событийная шина на RabbitMQ** (`pkg/events` + amqp-транспорт: publisher confirms, ручной ack, reconnect, TTL+DLX). Не начато: **Notification Service** (#48).
 
 - **Назначение:** каталог книг, учёт читателей и библиотекарей, выдача/возврат книг, уведомления о сроках возврата, единая точка входа для клиентов.
-- **Язык и стек:** Go (локально установлен `go1.27.1 windows/amd64`), gRPC, protobuf, `log/slog`, PostgreSQL (`pgx/v5` в book-service, `database/sql` + `lib/pq` в user-service); брокер — RabbitMQ (`amqp091-go`, ADR-0001), discovery — Kubernetes DNS (ADR-0003); фронтенд — React (в плане); AI-модуль — LLM/RAG (прототип работает, Go-адаптер в плане).
+- **Язык и стек:** Go (локально установлен `go1.27.1 windows/amd64`), gRPC, protobuf, `log/slog`, PostgreSQL (`pgx/v5` в book-service, `pgx/v5/stdlib` в user-service); брокер — RabbitMQ (`amqp091-go`, ADR-0001), discovery — Kubernetes DNS (ADR-0003); фронтенд — React (в плане); AI-модуль — LLM/RAG (прототип работает, Go-адаптер в плане).
 - **Архитектурный стиль:** микросервисы с изолированным хранилищем на каждый сервис (паттерн *database-per-service*).
 - **Организация кода:** монорепо с Go-воркспейсом (`go.work`) для локальной разработки нескольких модулей одновременно.
 
@@ -100,7 +100,7 @@ smart-library/
     │   │   ├── events/          # порт событий + типы/полезные нагрузки (user.registered и др.)
     │   │   ├── consumer/        # консьюмер-заготовка уведомлений (до Notification Service #48)
     │   │   ├── service/         # use-case'ы: регистрация, вход, RBAC, смена пароля, публикация событий
-    │   │   ├── repository/      # контракты + postgres/ (database/sql, lib/pq)
+    │   │   ├── repository/      # контракты + postgres/ (database/sql, pgx/v5/stdlib)
     │   │   └── handler/         # gRPC-адаптер, auth-интерцептор, gateway + Swagger UI
     │   └── migrations/          # 001_init.sql (users, sessions) + migrations.go (embed FS)
     ├── loan-service/            # модуль github.com/sapelyuk/smart-library/services/loan-service
@@ -170,7 +170,7 @@ Go-модуль `services/notification-service` на диске **отсутст
 | User Service: контракт, домен, security, сервис, handler, запуск | готов, собирается и работает |
 | REST-слой и Swagger User Service | готов: grpc-gateway на `:8092`, Swagger UI на `/swagger/` |
 | Аутентификация и RBAC | готово: argon2id-пароли, bearer-токены (в БД только SHA-256-хеш), сессии с TTL, роли READER/LIBRARIAN, интерцептор + проверки в домене |
-| Хранилище User Service | PostgreSQL 17 в Docker (`database/sql` + `lib/pq`), миграции при старте |
+| Хранилище User Service | PostgreSQL 17 в Docker (`database/sql` + `pgx/v5/stdlib`), миграции при старте |
 | Тесты User Service | домен, security (PR #11) и HTTP-слой (PR #26) — готово; сервис и репозиторий — нет |
 | API Gateway | **готово** (issue #10): reverse-proxy с gRPC-аутентификацией через user-service, маршрутизация по пути, `GATEWAY_*` env vars |
 | Loan Service | **готово** (issue #49): gRPC `:8083` + REST/Swagger `:8093`, выдача/возврат/продление, PostgreSQL 17 (`pgx/v5`), gRPC-клиенты к book- и user-service, auth-интерцептор, события `loan.*` через `LogPublisher` (перевод на `pkg/events` — follow-up) |
