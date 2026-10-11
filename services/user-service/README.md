@@ -25,7 +25,7 @@ user-service/
 │   ├── consumer/          # консьюмер-заготовка уведомлений (до Notification Service, #48)
 │   ├── service/           # use-case'ы: регистрация, вход, RBAC-проверки, отзыв сессий
 │   ├── repository/        # порты UserRepository/SessionRepository
-│   │   └── postgres/      # реализация на database/sql + lib/pq
+│   │   └── postgres/      # реализация на database/sql + pgx/v5/stdlib
 │   └── handler/           # grpc-адаптер, auth-интерцептор, gateway + Swagger UI
 ├── migrations/            # 001_init.sql (goose-формат) + go:embed
 └── migrations.go          # FS для pkg/migrate
@@ -55,7 +55,9 @@ user-service/
 
 ## Хранилище
 
-PostgreSQL через `database/sql` + `lib/pq`. Оба драйвера покрывают потребности миграции и репозитория; переход на `pgx` — отдельная задача (Issue #32). UUID генерирует приложение намеренно (см. `migrations/README.md`).
+PostgreSQL через `database/sql` + `pgx/v5/stdlib` (регистрация драйвера под именем `"pgx"`).
+Драйвер поддерживает бинарный протокол, COPY, LISTEN/NOTIFY и `pgxpool`. UUID генерирует
+приложение намеренно (см. `migrations/README.md`).
 
 Схема (`migrations/001_init.sql`): таблица `users` (уникальный `email`),
 таблица `sessions` (`token_hash` уникальный, `expires_at`), таблица
@@ -274,7 +276,6 @@ go test ./...
 
 - Покрыты домен, security и HTTP-слой; сервис и postgres-слой пока без тестов —
   проверяются ручной проверкой живого API.
-- Драйвер `lib/pq` вместо `pgx` — на PG 17 переход разблокирован (Issue #32).
 - Нет аутентификации mTLS между сервисами: `AuthenticateToken` рассчитан на
   доверенную сеть.
 - Консьюмер уведомлений — заготовка (`internal/consumer`): реальная доставка
