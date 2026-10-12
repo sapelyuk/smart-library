@@ -6,5 +6,6 @@ use (
 	./services/api-gateway
 	./services/book-service
 	./services/loan-service
+	./services/notification-service
 	./services/user-service
 )

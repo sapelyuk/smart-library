@@ -2,7 +2,7 @@
 
 ## Обзор проекта
 
-**Smart Library** — полнофункциональная платформа управления библиотекой: монорепо с бэкендом на Go (gRPC-микросервисы), планируемым React-приложением и AI-рекомендациями книг на LLM/RAG. Реализовано: **Book Service полностью рабочий** (gRPC-API, REST и Swagger через grpc-gateway, домен, бизнес-логика, PostgreSQL-хранилище, тесты), **User Service рабочий** (gRPC-API, REST и Swagger, регистрация/вход, хеширование паролей, сессии, ролевая модель, PostgreSQL-хранилище, миграции, unit-тесты домена и security, публикация доменных событий), **API Gateway рабочий** (единая HTTP-точка входа, маршрутизация к сервисам, gRPC-аутентификация через user-service), **Loan Service рабочий** (выдача/возврат/продление, gRPC-клиенты к book- и user-service, PostgreSQL), **AI Service рабочий** (gRPC :8085 + REST/Swagger :8095, домен, n8n-клиент, pgvector-хранилище, консьюмер `book.*` из RabbitMQ, unit-тесты домена), **RAG-прототип AI-модуля работает** (n8n + pgvector + Gemini, 20 книг проиндексировано), общий модуль `pkg` (logger, config, migrate, events) и **событийная шина на RabbitMQ** (`pkg/events` + amqp-транспорт: publisher confirms, ручной ack, reconnect, TTL+DLX). Не начато: **Notification Service** (#48).
+**Smart Library** — полнофункциональная платформа управления библиотекой: монорепо с бэкендом на Go (gRPC-микросервисы), планируемым React-приложением и AI-рекомендациями книг на LLM/RAG. Реализовано: **Book Service полностью рабочий** (gRPC-API, REST и Swagger через grpc-gateway, домен, бизнес-логика, PostgreSQL-хранилище, тесты), **User Service рабочий** (gRPC-API, REST и Swagger, регистрация/вход, хеширование паролей, сессии, ролевая модель, PostgreSQL-хранилище, миграции, unit-тесты домена и security, публикация доменных событий), **API Gateway рабочий** (единая HTTP-точка входа, маршрутизация к сервисам, gRPC-аутентификация через user-service), **Loan Service рабочий** (выдача/возврат/продление, gRPC-клиенты к book- и user-service, PostgreSQL), **Notification Service рабочий** (консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена), **AI Service рабочий** (gRPC :8085 + REST/Swagger :8095, домен, n8n-клиент, pgvector-хранилище, консьюмер `book.*` из RabbitMQ, unit-тесты домена), **RAG-прототип AI-модуля работает** (n8n + pgvector + Gemini, 20 книг проиндексировано), общий модуль `pkg` (logger, config, migrate, events) и **событийная шина на RabbitMQ** (`pkg/events` + amqp-транспорт: publisher confirms, ручной ack, reconnect, TTL+DLX).
 
 - **Назначение:** каталог книг, учёт читателей и библиотекарей, выдача/возврат книг, уведомления о сроках возврата, единая точка входа для клиентов.
 - **Язык и стек:** Go (локально установлен `go1.27.1 windows/amd64`), gRPC, protobuf, `log/slog`, PostgreSQL (`pgx/v5` в book-service, `pgx/v5/stdlib` в user-service); брокер — RabbitMQ (`amqp091-go`, ADR-0001), discovery — Kubernetes DNS (ADR-0003); фронтенд — React (в плане); AI-модуль — LLM/RAG (прототип работает, Go-адаптер в плане).
@@ -121,6 +121,19 @@ smart-library/
     │   │   ├── testdb/          # провижининг тестовой БД: миграции, advisory-lock, truncate
     │   │   └── handler/         # grpc.go: прото <-> домен; http.go: gateway + Swagger UI + тесты
     │   └── migrations/          # 001_init.sql (loans, частичный unique на copy_id) + migrations.go
+    ├── notification-service/    # модуль github.com/sapelyuk/smart-library/services/notification-service
+    │   ├── README.md            # документация сервиса: API, env, SMTP, события
+    │   ├── Dockerfile           # multi-stage образ, контекст сборки — корень репозитория
+    │   ├── cmd/server/main.go   # конфиг, SMTP, RabbitMQ, gRPC :8084 + HTTP :8094
+    │   ├── proto/notification/v1/notification.proto  # контракт NotificationService (1 RPC) + аннотации google.api.http
+    │   ├── gen/go/notification/v1/  # notification.pb.go, notification_grpc.pb.go, notification.pb.gw.go — генерация, не править
+    │   ├── docs/                # notification/v1/notification.swagger.json (генерация) + docs.go (embed)
+    │   └── internal/
+    │       ├── domain/          # Notification entity, доменные ошибки + тесты
+    │       ├── service/         # бизнес-логика: выбор канала доставки
+    │       ├── consumer/        # консьюмер loan.* из RabbitMQ
+    │       ├── email/           # SMTP-транспорт
+    │       └── handler/         # grpc.go: прото <-> домен; http.go: gateway + Swagger UI
     └── ai-service/              # ADR-0002; Go-адаптер + RAG-прототип, см. services/ai-service/README.md
         ├── README.md            # статус, плановый контракт ai.v1.AiService
         ├── cmd/server/main.go   # конфиг, обязательные DSN/URL, gRPC :8085 + HTTP :8095
@@ -154,7 +167,7 @@ smart-library/
             └── docs/            # документация прототипа (ARCHITECTURE/SETUP/USAGE)
 ```
 
-Go-модуль `services/notification-service` на диске **отсутствует** — заведена задача #48 (Notification). Go-модуль `services/ai-service` **готов** (задача #23): Go-адаптер с контрактом `ai.v1.AiService` (Recommend, IngestBook), pgvector-хранилище, n8n-клиент, консьюмер `book.*` из RabbitMQ, unit-тесты домена. RAG-прототип (`rag/`) также готов (#22): pgvector, схема, n8n workflow, проиндексировано 20 книг, плюс **eval-набор** (`evals/` + `scripts/eval-rag.ps1` + `tests/`) — офлайн-валидация: `powershell -File scripts/eval-rag.ps1 -ValidateOnly`.
+Go-модуль `services/notification-service` **готов** (задача #48): консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена. Go-модуль `services/ai-service` **готов** (задача #23): Go-адаптер с контрактом `ai.v1.AiService` (Recommend, IngestBook), pgvector-хранилище, n8n-клиент, консьюмер `book.*` из RabbitMQ, unit-тесты домена. RAG-прототип (`rag/`) также готов (#22): pgvector, схема, n8n workflow, проиндексировано 20 книг, плюс **eval-набор** (`evals/` + `scripts/eval-rag.ps1` + `tests/`) — офлайн-валидация: `powershell -File scripts/eval-rag.ps1 -ValidateOnly`.
 
 ## Статус реализации
 
@@ -176,7 +189,7 @@ Go-модуль `services/notification-service` на диске **отсутст
 | Loan Service | **готово** (issue #49): gRPC `:8083` + REST/Swagger `:8093`, выдача/возврат/продление, PostgreSQL 17 (`pgx/v5`), gRPC-клиенты к book- и user-service, auth-интерцептор, события `loan.*` через `LogPublisher` (перевод на `pkg/events` — follow-up) |
 | Публикация доменных событий (user-service) | **готово** (issue #14): `user.registered`/`user.status.changed`/`user.session.created` через `pkg/events` (best effort); консьюмер-заготовка уведомлений `internal/consumer` (durable-очередь `user.notifications.stub`, до #48); RabbitMQ-транспорт подключён в `cmd/server` |
 | Тесты Loan Service | домен, auth-интерцептор, сервис (с моками), PostgreSQL-репозиторий (против БД, `POSTGRES_TEST_DSN`, иначе skip), HTTP-слой (`httptest`) |
-| Notification Service | не начато; заведена задача #48 (напоминания о сроках, консьюмер `loan.*`) |
+| Notification Service | **готово** (issue #48): консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена |
 | gRPC-клиенты между сервисами, события, discovery | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); discovery: ADR-0003 (Kubernetes DNS); брокер: ADR-0001 (RabbitMQ); реализация событий — #14 (готово) |
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28); в test-джобе RabbitMQ-сервис для интеграционного теста `pkg/events` |
 | Контейнеризация | готово: multi-stage Dockerfile для book-, user-, loan- и ai-service, сервисы и БД в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6) |

@@ -129,7 +129,7 @@ Smart Library AI является **первоклассным компонен�
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | **готово** — `#23`: gRPC/REST (`:8085`/`:8095`), клиент n8n-webhook (без генерации вне RAG), хранилище pgvector (`pgx/v5`), консьюмер `book.*` из RabbitMQ, Dockerfile + контейнер в `docker-compose.yml`; архитектура — ADR-0002 |
-| Notification Service                                   | не начато — `#48`                                      |
+| Notification Service                                   | **готово** — `#48`: консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена |
 | API Gateway                                            | готово — `#10` (gRPC-аутентификация через user-service, маршрутизация по пути, Dockerfile) |
 | Межсервисные gRPC-клиенты, discovery                  | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); gateway — user-service; discovery — `#8` |
 | User Service: техдолг (хранилище и API)                | `#32` (pgx вместо lib/pq), `#33` (pg_trgm + keyset-пагинация), `#34` (rate limiting), `#31` (кэш валидации сессий) |
@@ -209,6 +209,7 @@ docker compose down -v          # остановить и удалить volume
 | `book-service` | build `services/book-service/Dockerfile` | `8081` (gRPC), `8091` (REST + Swagger + `/healthz`) |
 | `user-service` | build `services/user-service/Dockerfile` | `8082` (gRPC), `8092` (REST + Swagger + `/healthz`) |
 | `loan-service` | build `services/loan-service/Dockerfile` | `8083` (gRPC), `8093` (REST + Swagger + `/healthz`) |
+| `notification-service` | build `services/notification-service/Dockerfile` | `8084` (gRPC), `8094` (REST + Swagger + `/healthz`) |
 | `ai-service` | build `services/ai-service/Dockerfile` | `8085` (gRPC), `8095` (REST + Swagger + `/healthz`) |
 | `book-db` | `postgres:17` | `5434` |
 | `user-db` | `postgres:17` | `5432` |
@@ -249,7 +250,7 @@ proto-пакеты), поэтому его Dockerfile копирует исхо�
 
 ```
 smart-library/
-├── go.work              # воркспейс: ./services/api-gateway, ./services/book-service, ./services/user-service, ./services/loan-service, ./pkg
+├── go.work              # воркспейс: ./services/api-gateway, ./services/book-service, ./services/user-service, ./services/loan-service, ./services/notification-service, ./pkg
 ├── README.md            # этот файл
 ├── KODA.md              # контекст репозитория для AI-сессий
 ├── docker-compose.yml   # сервисы + БД + RabbitMQ: api-gateway (:8080), book/user/loan-service, book-db (:5434), user-db (:5432), loan-db (:5435), pgvector (:5433)
@@ -294,6 +295,13 @@ smart-library/
     │   ├── docs/        # swagger.json (генерация) + обёртка go:embed
     │   ├── internal/    # domain, service, repository (postgres), bookclient, usersvc, auth, events, testdb, handler
     │   └── migrations/
+    ├── notification-service/  # реализован (#48): консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, порт :8084/:8094
+    │   ├── Dockerfile   # multi-stage образ (контекст сборки — корень репозитория)
+    │   ├── cmd/server/
+    │   ├── proto/notification/v1/
+    │   ├── gen/go/      # генерация, не править руками
+    │   ├── docs/        # swagger.json (генерация) + обёртка go:embed
+    │   └── internal/    # domain, service, consumer, email, handler
     └── ai-service/      # ADR-0002; RAG-прототип работает, см. services/ai-service/README.md
         └── rag/         # рабочий прототип RAG: n8n workflow, pgvector схема (db/),
                          # скрипты (scripts/), документация (docs/),
@@ -301,8 +309,7 @@ smart-library/
                          # tests/ — 53 offline-теста, .env.example — шаблон переменных
 ```
 
-Сервис `notification-service` из архитектурной таблицы ещё не создан как
-директория — заведена задача `#48`.
+Сервис `notification-service` реализован (#48): потребляет события `loan.*` из RabbitMQ, отправляет email/SMS-напоминания о сроках возврата. Порт `:8084` (gRPC) / `:8094` (REST + Swagger).
 
 Для локальной разработки нескольких модулей одновременно используется Go-воркспейс
 (`go.work`).

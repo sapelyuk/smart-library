@@ -232,6 +232,36 @@ services:
       GATEWAY_LOG_FORMAT: ${GATEWAY_LOG_FORMAT:-json}
     restart: unless-stopped
 
+  # Notification Service — consumer of loan.* events from RabbitMQ that sends
+  # email/SMS reminders about due dates. No database of its own: it subscribes
+  # to the platform broker and delegates delivery to an SMTP transport.
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    image: library/notification-service:local
+    container_name: library-notification-service
+    hostname: library-notification-service
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8084:8084"  # gRPC API
+      - "8094:8094"  # REST + Swagger + /healthz
+    environment:
+      NOTIFICATION_SERVICE_GRPC_ADDR: ":8084"
+      NOTIFICATION_SERVICE_HTTP_ADDR: ":8094"
+      NOTIFICATION_SERVICE_LOG_LEVEL: ${NOTIFICATION_SERVICE_LOG_LEVEL:-info}
+      NOTIFICATION_SERVICE_SMTP_HOST: ${NOTIFICATION_SERVICE_SMTP_HOST:-}
+      NOTIFICATION_SERVICE_SMTP_PORT: ${NOTIFICATION_SERVICE_SMTP_PORT:-587}
+      NOTIFICATION_SERVICE_SMTP_USERNAME: ${NOTIFICATION_SERVICE_SMTP_USERNAME:-}
+      NOTIFICATION_SERVICE_SMTP_PASSWORD: ${NOTIFICATION_SERVICE_SMTP_PASSWORD:-}
+      NOTIFICATION_SERVICE_SMTP_FROM: ${NOTIFICATION_SERVICE_SMTP_FROM:-}
+      # Connect to the platform broker.
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-}
+    restart: unless-stopped
+
   # AI Service — Go-адаптер рекомендательного сервиса (ADR-0002).
   # Отвечает на GenerateRecommendations через RAG-воркфлоу (n8n), ведёт
   # pgvector-индекс каталога и потребляет события book.* из RabbitMQ.
