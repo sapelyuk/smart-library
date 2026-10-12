@@ -91,10 +91,6 @@ func run(cfg appConfig, log *slog.Logger) error {
 		return errors.New("NOTIFICATION_SERVICE_SMTP_HOST is required")
 	}
 
-	if cfg.smtpUsername == "" && cfg.smtpPassword == "" {
-		return errors.New("NOTIFICATION_SERVICE_SMTP_USERNAME and NOTIFICATION_SERVICE_SMTP_PASSWORD are required")
-	}
-
 	if cfg.smtpFrom == "" {
 		return errors.New("NOTIFICATION_SERVICE_SMTP_FROM is required")
 	}
