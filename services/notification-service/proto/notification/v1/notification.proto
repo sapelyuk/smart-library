@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package notification.v1;
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/sapelyuk/smart-library/services/notification-service/gen/go/notification/v1;notificationv1";
+
+// Notification Service — consumer of loan.* events from RabbitMQ that sends
+// email and SMS reminders about due dates. It has no database of its own: the
+// service only subscribes to the platform broker and delegates delivery to an
+// SMTP (or SMS) transport.
+//
+// The gRPC API is minimal: a health check and placeholder endpoints that keep
+// the gateway routing table consistent. All business logic lives in the
+// consumer goroutine.
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Notification Service API"
+    version: "1.0"
+    description: "Email and SMS reminders for book loans. Consumes loan.* events from RabbitMQ and delegates delivery to an SMTP transport. No database of its own."
+    contact: {name: "Smart Library"}
+  }
+  consumes: "application/json"
+  produces: "application/json"
+};
+
+// Placeholder message to keep the proto contract valid. The service has no
+// user-facing API beyond healthcheck.
+message Empty {}
+
+// Notification Service API — minimal surface for routing and health.
+service NotificationService {
+  // Healthcheck endpoint.
+  rpc Health(Empty) returns (Empty) {
+    option (google.api.http) = {get: "/healthz"};
+  }
+}
