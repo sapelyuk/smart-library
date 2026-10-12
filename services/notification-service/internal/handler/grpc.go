@@ -61,12 +61,8 @@ func NewREST(grpcAddr string) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, "OK")
-			return
-		}
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "OK")
 	})
 
 	mux.Handle("/", gateway)
