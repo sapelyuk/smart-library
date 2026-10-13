@@ -54,13 +54,13 @@ services:
   # Vector store for the AI recommendation service (ADR-0002,
   # docs/adr/0002-ai-recommendation-architecture.md).
   # Schema and helper scripts: services/ai-service/rag/ (db/, scripts/).
-  # Published on host port 5433, alongside the user-service database on 5432.
+  # Published on host port 5436, alongside the user-service database on 5432.
   ai-rag-db:
     image: pgvector/pgvector:pg17
     container_name: library-ai-rag-db
     hostname: library-ai-rag-db
     ports:
-      - "5433:5432"
+      - "5436:5432"
     environment:
       POSTGRES_USER: ${AI_RAG_DB_USER:-bookrag}
       POSTGRES_PASSWORD: ${AI_RAG_DB_PASSWORD:-bookrag}
@@ -80,7 +80,7 @@ services:
 
   # Database for the Book Service. The service stores its catalog here through
   # pgx/v5 and applies migrations/001_init.sql on startup.
-  # Published on host port 5434, alongside user-db on 5432 and ai-rag-db on 5433.
+  # Published on host port 5434, alongside user-db on 5432 and ai-rag-db on 5436.
   book-db:
     image: postgres:17
     container_name: library-book-db
