@@ -292,14 +292,14 @@ services:
       AI_LOG_FORMAT: ${AI_LOG_FORMAT:-json}
       AI_CATALOG_GRPC_ADDR: book-service:8081
       AI_USER_GRPC_ADDR: user-service:8082
-      # RAG workflow (n8n). Without a key the service still starts and answers
-      # unavailable — the store and the catalog keep working.
-      AI_N8N_BASE_URL: ${AI_N8N_BASE_URL:-http://host.docker.internal:5678}
+      # RAG workflow (n8n). Inside the compose network n8n is reachable by its
+      # service name on port 5678. Override via .env:
+      #   AI_N8N_BASE_URL=http://host.docker.internal:5678  — local n8n
+      #   AI_N8N_BASE_URL=http://n8n:5678                   — container n8n (default)
+      AI_N8N_BASE_URL: ${AI_N8N_BASE_URL:-http://n8n:5678}
       AI_N8N_HEADER_NAME: ${AI_N8N_HEADER_NAME:-x-book-rag-key}
       AI_N8N_HEADER_VALUE: ${AI_N8N_HEADER_VALUE:-}
       # pgvector store: inside the compose network the database is reachable by
-      # its service name, on the internal port 5432.
-      AI_RAG_STORE_DSN: host=ai-rag-db port=5432 user=${AI_RAG_DB_USER:-bookrag} password=${AI_RAG_DB_PASSWORD:-bookrag} dbname=${AI_RAG_DB_NAME:-bookrag} sslmode=disable
       AI_EMBEDDINGS_BASE_URL: ${AI_EMBEDDINGS_BASE_URL:-}
       AI_EMBEDDINGS_API_KEY: ${AI_EMBEDDINGS_API_KEY:-}
       AI_EMBEDDINGS_MODEL: ${AI_EMBEDDINGS_MODEL:-gemini-embedding-001}
@@ -310,9 +310,55 @@ services:
       AI_RABBITMQ_EXCHANGE: ${AI_RABBITMQ_EXCHANGE:-}
     restart: unless-stopped
 
+  # RAG workflow engine (n8n) — hosts the Book RAG workflow that the AI
+  # service calls for recommendations and ingest. The workflow is imported
+  # from services/ai-service/rag/workflow/book-rag-system-dev.json at startup.
+  # Attach credentials in the n8n UI at http://localhost:5678.
+  n8n:
+    image: n8nio/n8n:2.40.7
+    container_name: library-n8n
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "if [ ! -f /home/node/.n8n/.workflows-imported ]; then
+        n8n import:workflow --separate --input=/workflows/ &&
+        n8n publish:workflow --id=BookRagSys2026 &&
+        node -e \"const s=require('/usr/local/lib/node_modules/n8n/node_modules/.pnpm/sqlite3@5.1.7_bluebird@3.7.2_supports-color@8.1.1/node_modules/sqlite3').Database; const db=new s('/home/node/.n8n/database.sqlite'); db.run('UPDATE workflow_entity SET active=1 WHERE id=?', ['BookRagSys2026'], function(e){db.close()});\" &&
+        touch /home/node/.n8n/.workflows-imported;
+      fi;
+      exec n8n start"
+    ports:
+      # Host port 5679 to avoid conflict with a local n8n on 5678.
+      # Inside the compose network the service is reachable as n8n:5678.
+      - "5679:5678"
+    environment:
+      # Persist the internal SQLite database and credentials on a volume.
+      DB_TYPE: sqlite
+      DB_SQLITE_FILE: /home/node/.n8n/database.sqlite
+      # Allow plain http access from the compose network.
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-UTC}
+      TZ: ${GENERIC_TIMEZONE:-UTC}
+      # Basic auth for REST API (needed to activate imported workflows).
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: n8n
+      N8N_BASIC_AUTH_PASSWORD: n8n-dev
+    volumes:
+      - n8n-data:/home/node/.n8n
+      # Only the dev workflow is imported to avoid duplicate node-name conflicts.
+      - ./services/ai-service/rag/workflow/import:/workflows:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5678/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
 volumes:
   rabbitmq-data:
   ai-rag-db-data:
   user-db-data:
   book-db-data:
   loan-db-data:
+  n8n-data:

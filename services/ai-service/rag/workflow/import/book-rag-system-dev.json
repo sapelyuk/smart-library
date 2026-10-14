@@ -1,0 +1,949 @@
+{
+  "name": "Book RAG System (dev)",
+  "id": "BookRagSys2026",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## рџ“љ Book Recommender RAG System\n\nProject folder:\n`C:\\Users\\ThinkPro\\Documents\\deepseek-harness\\n8n-rag-system\\`\nRead `docs/SETUP.md` before first run.\n\n### Two entry points, one agent\n- **Chat:** `When chat message received`\n- **API:** `Recommend Webhook`\n  POST /webhook/book-rag/recommend\n\n### Two ingest paths, one indexing chain\n- **Bulk:** `Index Book Library`\n- **Single:** `Ingest Webhook`\n  POST /webhook/book-rag/ingest\n\n### Before first run\nCreate the 3 credentials named in\n`docs/SETUP.md` step 5, then attach them\nto the nodes listed in step 6.\n\n### Design rules (docs/RULES.md)\n- No tool accepts free-text SQL\n- One embedding node, shared by ingest\n  and retrieval",
+        "height": 620,
+        "width": 520,
+        "color": 4
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Sticky Note - Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Ingest\n\nBoth ingest paths merge at\n**Prepare Book Record**, so there is\nexactly ONE indexing code path.\n\nRe-running ingest is safe: old chunks\nfor a book are replaced, and the book\nrow is upserted by `book_id`.",
+        "height": 280,
+        "width": 340,
+        "color": 5
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Sticky Note - Ingest",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1720,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Query\n\nRead-only, parameterised tools only.\nThe model supplies VALUES, never SQL.\nSee `docs/DECISIONS.md` ADR-005.\n\n**Swap the chat model here** if Gemini's\nfree quota is too small вЂ” one node.\nSee ADR-001 and ADR-006.",
+        "height": 280,
+        "width": 340,
+        "color": 6
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Sticky Note - Query",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1720,
+        2180
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "Index Book Library",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1300,
+        780
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Read Book Catalogue",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1080,
+        780
+      ],
+      "notes": "Reads samples/books.csv. Replace with your own catalogue or a Google Sheets / Drive source later."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "book-rag/ingest",
+        "authentication": "none",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000003",
+      "name": "Ingest Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1300,
+        1060
+      ],
+      "webhookId": "9f2c1a54-6d3e-4a71-9b02-0c7a5e41d813",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Book RAG Webhook Auth"
+        }
+      },
+      "notes": "Webhook auth disabled for local dev. In production, re-enable headerAuth."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1000000-0000-4000-8000-000000000001",
+              "name": "title",
+              "value": "={{ $json.body ? $json.body.title : $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-000000000002",
+              "name": "author",
+              "value": "={{ $json.body ? $json.body.author : $json.author }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-000000000003",
+              "name": "genre",
+              "value": "={{ $json.body ? $json.body.genre : $json.genre }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-000000000004",
+              "name": "tags",
+              "value": "={{ $json.body ? $json.body.tags : $json.tags }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-000000000005",
+              "name": "description",
+              "value": "={{ $json.body ? $json.body.description : $json.description }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-000000000006",
+              "name": "content",
+              "value": "={{ $json.body ? $json.body.content : $json.content }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-000000000007",
+              "name": "book_uuid",
+              "value": "={{ $json.body ? $json.body.book_id : $json.book_id }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-000000000008",
+              "name": "upstream",
+              "value": "={{ $json.body ? 'webhook' : 'csv' }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-000000000009",
+              "name": "published_year",
+              "value": "={{ $json.body ? $json.body.published_year : $json.published_year }}",
+              "type": "number"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-00000000000a",
+              "name": "page_count",
+              "value": "={{ $json.body ? $json.body.page_count : $json.page_count }}",
+              "type": "number"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-00000000000b",
+              "name": "rating",
+              "value": "={{ $json.body ? $json.body.rating : $json.rating }}",
+              "type": "number"
+            },
+            {
+              "id": "c1000000-0000-4000-8000-00000000000c",
+              "name": "book_url",
+              "value": "={{ $json.body ? $json.body.book_url : $json.book_url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "attemptToConvertTypes": true
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000004",
+      "name": "Flatten Book Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -870,
+        880
+      ],
+      "notes": "Absorbs the webhook's `body` wrapper and normalises the CSV path, so downstream nodes never need to know which entry point fired. attemptToConvertTypes coerces numeric strings to numbers."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the canonical book record from the flattened item.\n// One code path for both ingest entry points.\nconst item = $input.first().json;\n\nconst slugify = (s) =>\n  String(s || '')\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .slice(0, 80);\n\nconst num = (v) => {\n  if (v === undefined || v === null || v === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\nconst str = (v) => (v === undefined || v === null || v === '' ? null : String(v));\n\n// tags: accept an array, a JSON array string, or a comma/semicolon separated string.\nconst tags = (() => {\n  const raw = item.tags;\n  if (Array.isArray(raw)) return raw.map((t) => String(t).trim()).filter(Boolean);\n  if (typeof raw === 'string' && raw.trim().startsWith('[')) {\n    try {\n      const parsed = JSON.parse(raw);\n      if (Array.isArray(parsed)) return parsed.map((t) => String(t).trim()).filter(Boolean);\n    } catch (e) {\n      // fall through to the delimiter split below\n    }\n  }\n  return String(raw || '')\n    .split(/[,;]/)\n    .map((t) => t.trim())\n    .filter(Boolean);\n})();\n\nconst title = str(item.title) || 'Untitled';\nconst author = str(item.author);\nconst genre = str(item.genre);\nconst description = str(item.description) || '';\nconst content = str(item.content) || '';\n\n// The whole book text as indexed. Title/author/genre are prepended on purpose:\n// it keeps a book findable by name even when only its description was supplied.\nconst text = [title, author ? 'by ' + author : '', genre ? '[' + genre + ']' : '']\n  .filter(Boolean)\n  .join(' ')\n  .concat('. ', description, content ? ' ' + content : '')\n  .trim();\n\nconst book_id = str(item.book_uuid) || slugify(author ? author + ' ' + title : title) || 'book-' + Date.now();\n\nreturn [{\n  json: {\n    book_id,\n    title,\n    author,\n    genre,\n    tags,\n    description,\n    content,\n    text,\n    published_year: num(item.published_year),\n    page_count: num(item.page_count),\n    rating: num(item.rating),\n    language: str(item.language) || 'en',\n    book_url: str(item.book_url),\n    source: str(item.upstream) || 'ingest',\n  },\n}];"
+      },
+      "id": "b1000000-0000-4000-8000-000000000005",
+      "name": "Prepare Book Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -650,
+        880
+      ],
+      "notes": "Derives book_id, builds the indexed text, and normalises types. Both ingest paths converge here."
+    },
+    {
+      "parameters": {
+        "batchSize": 3,
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000006",
+      "name": "Loop Over Books",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -430,
+        880
+      ],
+      "notes": "Small batches on purpose: the free embedding quota is the real limit. See RULES.md В§5.3."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM book_chunks WHERE metadata->>'book_id' = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $('Prepare Book Record').item.json.book_id ] }}"
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000007",
+      "name": "Delete Previous Chunks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -200,
+        880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "Postgres (Book RAG)"
+        }
+      },
+      "notes": "Idempotency. n8n's vector store always inserts new rows (fresh uuid ids) and does not know about book_id, so re-indexing without this would duplicate every chunk. Parameterised ($1), never string-concatenated."
+    },
+    {
+      "parameters": {
+        "chunkSize": 1000,
+        "chunkOverlap": 200,
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000008",
+      "name": "Chunk Book Text",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        1060
+      ],
+      "notes": "Only active because the loader is set to textSplittingMode: custom. With the loader's default ('simple') a connected splitter is silently ignored."
+    },
+    {
+      "parameters": {
+        "dataType": "json",
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $('Prepare Book Record').item.json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "book_id",
+                "value": "={{ $('Prepare Book Record').item.json.book_id }}"
+              },
+              {
+                "name": "title",
+                "value": "={{ $('Prepare Book Record').item.json.title }}"
+              },
+              {
+                "name": "author",
+                "value": "={{ $('Prepare Book Record').item.json.author }}"
+              },
+              {
+                "name": "genre",
+                "value": "={{ $('Prepare Book Record').item.json.genre }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000009",
+      "name": "Book Document Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        -200,
+        1240
+      ],
+      "notes": "Metadata keys carry NO leading '=' (a defect in the template this project replaces). jsonData resolves to a string, so the loader treats it as plain text, which is what we want for chunking. It reads text from 'Prepare Book Record' by node reference, NOT $json.text: this loader's main input is the output of the DELETE above it, which carries only {success:true} and would make the expression undefined ('Document loader is not initialized')."
+    },
+    {
+      "parameters": {
+        "modelName": "text-embedding-3-large",
+        "options": {
+          "dimensions": 3072
+        }
+      },
+      "id": "b1000000-0000-4000-8000-00000000000a",
+      "name": "Embeddings OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1,
+      "position": [
+        80,
+        1240
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_ME",
+          "name": "OpenAI Compatible API"
+        }
+      },
+      "notes": "Swapped from Gemini. text-embedding-3-large → 3072 dims — matches vector(3072) in db/01-schema.sql. Attach an 'OpenAI API' credential in the n8n UI."
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": "book_chunks",
+        "embeddingBatchSize": 100,
+        "options": {
+          "columnNames": {
+            "values": {
+              "idColumnName": "id",
+              "vectorColumnName": "embedding",
+              "contentColumnName": "text",
+              "metadataColumnName": "metadata"
+            }
+          }
+        }
+      },
+      "id": "b1000000-0000-4000-8000-00000000000b",
+      "name": "Postgres PGVector Store (Insert)",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        320,
+        880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "Postgres (Book RAG)"
+        }
+      },
+      "notes": "Writes id/text/metadata/embedding into book_chunks. Column names MUST match db/01-schema.sql."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO books (book_id, title, author, genre, tags, published_year, page_count, language, rating, description, source)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\nON CONFLICT (book_id) DO UPDATE SET\n  title = EXCLUDED.title,\n  author = EXCLUDED.author,\n  genre = EXCLUDED.genre,\n  tags = EXCLUDED.tags,\n  published_year = EXCLUDED.published_year,\n  page_count = EXCLUDED.page_count,\n  language = EXCLUDED.language,\n  rating = EXCLUDED.rating,\n  description = EXCLUDED.description,\n  source = EXCLUDED.source,\n  updated_at = now();",
+        "options": {
+          "queryReplacement": "={{ [ $('Prepare Book Record').item.json.book_id, $('Prepare Book Record').item.json.title, $('Prepare Book Record').item.json.author, $('Prepare Book Record').item.json.genre, $('Prepare Book Record').item.json.tags, $('Prepare Book Record').item.json.published_year, $('Prepare Book Record').item.json.page_count, $('Prepare Book Record').item.json.language, $('Prepare Book Record').item.json.rating, $('Prepare Book Record').item.json.description, $('Prepare Book Record').item.json.source ] }}"
+        }
+      },
+      "id": "b1000000-0000-4000-8000-00000000000c",
+      "name": "Upsert Book Metadata",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        560,
+        880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "Postgres (Book RAG)"
+        }
+      },
+      "notes": "Upsert, not insert: re-ingesting a book updates it instead of duplicating. All 11 values are parameterised ($1..$11). PARAMETER RULE, learned the hard way: queryReplacement must evaluate to a STRING or an ARRAY. A comma-separated list of {{ }} expressions is NOT safe - an array value (tags) is spread into extra parameters and a string containing commas (description) is split by stringToArray, either of which shifts every later $n. One array expression fixes both: each element becomes exactly one parameter, and node-postgres serialises a JS array to a Postgres array literal for text[]."
+    },
+    {
+      "parameters": {},
+      "id": "b1000000-0000-4000-8000-00000000000d",
+      "name": "Indexing Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        800,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, book_id: $('Prepare Book Record').item.json.book_id, title: $('Prepare Book Record').item.json.title, book_url: $('Prepare Book Record').item.json.book_url } }}",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-00000000000e",
+      "name": "Respond to Ingest",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "book-rag/recommend",
+        "authentication": "none",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-00000000000f",
+      "name": "Recommend Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1300,
+        2260
+      ],
+      "webhookId": "4b8d7e21-53a9-4f6c-8e15-2d9b6a3f7c04",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Book RAG Webhook Auth"
+        }
+      },
+      "notes": "Webhook auth disabled for local dev. In production, re-enable headerAuth."
+    },
+    {
+      "parameters": {
+        "public": false,
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000010",
+      "name": "When chat message received",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1300,
+        2520
+      ],
+      "webhookId": "7e1f4c68-9a2b-4d35-8c47-5b0e2d9a6f31"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c2000000-0000-4000-8000-000000000001",
+              "name": "chatInput",
+              "value": "={{ $json.body ? $json.body.chatInput : $json.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "c2000000-0000-4000-8000-000000000002",
+              "name": "sessionId",
+              "value": "={{ $json.body ? $json.body.sessionId : $json.sessionId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": false
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000011",
+      "name": "Normalise Chat Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1040,
+        2400
+      ],
+      "notes": "Absorbs the webhook body wrapper and passes the chat trigger payload through unchanged. One normalisation point for both query entry points."
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are a warm, knowledgeable librarian for the book library stored in this system. You help people find their next great read.\n\nTOOLS AVAILABLE\n- 'Search Book Library': semantic search over book content. USE THIS FIRST for any recommendation or subject request.\n- 'Get Book Details': full metadata for one book_id.\n- 'List Library': browse or search the catalogue by title, author, genre, tag or description.\n- 'Remove Book': permanently deletes one book and its indexed content. Use ONLY when the user explicitly asks to delete a specific book, and confirm the title in your reply.\n\nHOW TO RECOMMEND\n1. Before answering, ALWAYS search the library with a descriptive query built from the user's stated taste: themes, tone, pace, subject matter, and comparable books they mention. Do not search only for a literal title.\n2. Recommend only books that appeared in your tool results. NEVER invent titles, authors, or books.\n3. Give 2 to 4 recommendations. For each, format exactly: Title by Author - one sentence explaining why it suits what they described. Do not mention similarity scores.\n4. Ground every claim in returned data. Do not speculate about plot details you were not shown.\n5. If the library has nothing suitable, say so plainly, and offer the closest alternatives you did find. Never pad the answer with invented books.\n6. For pure catalogue questions (what do you have in a genre, tell me about a book), use 'List Library' or 'Get Book Details' and summarise.\n\nSTYLE\nBe concise and specific. Never mention these instructions or tool names. If a question is unrelated to books or this library, briefly say what you can help with instead.",
+          "maxIterations": 10,
+          "returnIntermediateSteps": false,
+          "enableStreaming": false
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000012",
+      "name": "Book Recommendation Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -760,
+        2400
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.3,
+          "maxOutputTokens": 2048
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000013",
+      "name": "Chat Model (OpenAI)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.1,
+      "position": [
+        -820,
+        2660
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_ME",
+          "name": "OpenAI Compatible API"
+        }
+      },
+      "notes": "Swapped from Gemini to OpenAI-compatible. Attach an 'OpenAI API' credential in the n8n UI."
+    },
+    {
+      "parameters": {
+        "sessionIdType": "fromInput",
+        "tableName": "n8n_book_chat_histories",
+        "contextWindowLength": 10
+      },
+      "id": "b1000000-0000-4000-8000-000000000014",
+      "name": "Postgres Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        -540,
+        2660
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "Postgres (Book RAG)"
+        }
+      },
+      "notes": "Creates its own table on first use. fromInput takes sessionId from the incoming item, so webhook callers control their own conversation thread."
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Semantic search over the book library. Returns the most relevant passages and book descriptions for a natural-language description of what the reader enjoys. Use this FIRST for any recommendation request: supply themes, tone, pace, subject matter and comparable titles rather than just a book name.",
+        "tableName": "book_chunks",
+        "topK": 8,
+        "includeDocumentMetadata": true,
+        "options": {
+          "distanceStrategy": "cosine",
+          "columnNames": {
+            "values": {
+              "idColumnName": "id",
+              "vectorColumnName": "embedding",
+              "contentColumnName": "text",
+              "metadataColumnName": "metadata"
+            }
+          }
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000015",
+      "name": "Search Book Library",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        -760,
+        2880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "Postgres (Book RAG)"
+        }
+      },
+      "notes": "At typeVersion 1.3 the tool name the agent sees is THIS NODE'S NAME. Renaming it renames the tool вЂ” keep the system message in sync."
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetch the full catalogue metadata for one book: title, author, genre, tags, year, page count, rating and description. Use this when you already know a book_id (for example one returned by a search) and need its details.",
+        "operation": "executeQuery",
+        "query": "SELECT * FROM get_book($1);",
+        "options": {
+          "queryReplacement": "={{ [ $fromAI('book_id', 'The exact book_id to look up, as returned by a previous search', 'string') ] }}"
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000016",
+      "name": "Get Book Details",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        -540,
+        2880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "Postgres (Book RAG)"
+        }
+      },
+      "notes": "The model supplies a VALUE via $fromAI; it never supplies SQL. This is the deliberate fix for the injection flaw in the template this project replaces (ADR-005)."
+    },
+    {
+      "parameters": {
+        "toolDescription": "Browse or search the book catalogue by a single free-text term matched against title, author, genre, tags and description. Use for open-ended shelf questions like 'what science fiction do you have?' or 'anything by Le Guin?'. Pass an empty string to list the highest-rated books.",
+        "operation": "executeQuery",
+        "query": "SELECT * FROM list_books($1, 25, 0);",
+        "options": {
+          "queryReplacement": "={{ [ $fromAI('search_query', 'A single term to match against title, author, genre, tags or description. Use an empty string to browse the top-rated books.', 'string') ] }}"
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000017",
+      "name": "List Library",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        -320,
+        2880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "Postgres (Book RAG)"
+        }
+      },
+      "notes": "One argument on purpose: relying on a model to supply several $fromAI arguments in a defined order is fragile. See the list_books comment in db/01-schema.sql."
+    },
+    {
+      "parameters": {
+        "toolDescription": "Remove a book and all of its indexed content from the library, permanently. Only call this when the user has clearly asked to delete a specific book and you know its exact book_id. Confirm the title back to the user in your reply.",
+        "operation": "executeQuery",
+        "query": "SELECT * FROM delete_book($1);",
+        "options": {
+          "queryReplacement": "={{ [ $fromAI('book_id', 'The exact book_id of the book to remove', 'string') ] }}"
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000019",
+      "name": "Remove Book",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        -100,
+        2880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "Postgres (Book RAG)"
+        }
+      },
+      "notes": "Single parameterised call to delete_book(), which removes the catalogue row AND its chunks atomically. Disable this node if you do not want the agent able to delete content."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { output: $json.output, sessionId: $('Normalise Chat Input').first().json.sessionId } }}",
+        "options": {}
+      },
+      "id": "b1000000-0000-4000-8000-000000000018",
+      "name": "Respond to Recommend",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -760,
+        2100
+      ]
+    }
+  ],
+  "connections": {
+    "Index Book Library": {
+      "main": [
+        [
+          {
+            "node": "Read Book Catalogue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Book Catalogue": {
+      "main": [
+        [
+          {
+            "node": "Flatten Book Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest Webhook": {
+      "main": [
+        [
+          {
+            "node": "Flatten Book Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flatten Book Fields": {
+      "main": [
+        [
+          {
+            "node": "Prepare Book Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Book Record": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Indexing Done": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Books": {
+      "main": [
+        [
+          {
+            "node": "Respond to Ingest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete Previous Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Previous Chunks": {
+      "main": [
+        [
+          {
+            "node": "Postgres PGVector Store (Insert)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres PGVector Store (Insert)": {
+      "main": [
+        [
+          {
+            "node": "Upsert Book Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Book Metadata": {
+      "main": [
+        [
+          {
+            "node": "Indexing Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk Book Text": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Book Document Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book Document Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Postgres PGVector Store (Insert)",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommend Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalise Chat Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Normalise Chat Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Chat Input": {
+      "main": [
+        [
+          {
+            "node": "Book Recommendation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Book Recommendation Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Book Library": {
+      "ai_tool": [
+        [
+          {
+            "node": "Book Recommendation Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Book Details": {
+      "ai_tool": [
+        [
+          {
+            "node": "Book Recommendation Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Library": {
+      "ai_tool": [
+        [
+          {
+            "node": "Book Recommendation Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Book": {
+      "ai_tool": [
+        [
+          {
+            "node": "Book Recommendation Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book Recommendation Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Recommend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Postgres PGVector Store (Insert)",
+            "type": "ai_embedding",
+            "index": 0
+          },
+          {
+            "node": "Search Book Library",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Model (OpenAI)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Book Recommendation Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
