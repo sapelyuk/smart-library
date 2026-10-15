@@ -44,4 +44,4 @@ Service URLs are configurable via environment variables (defaults shown):
 
 - Docker stack must be running (`docker compose up -d`)
 - Seed librarian must be configured (`.env`: `USER_SERVICE_SEED_LIBRARIAN_EMAIL=admin@library.local`)
-- For `TestAIService` Recommend: n8n container must be running (`docker compose up -d n8n`). The dev workflow is auto-imported and activated at first start. OpenAI/Postgres credentials still need to be attached in the n8n UI at `http://localhost:5679`.
+- For `TestAIService` Recommend: n8n container must be running (`docker compose up -d n8n`). The dev workflow is auto-imported and activated at first start. Gemini (embeddings + chat) and Postgres (pgvector) credentials still need to be attached in the n8n UI at `http://localhost:5679`. The OpenAI nodes are disconnected spares — attach them only if you switch the flow to OpenAI.

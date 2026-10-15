@@ -158,10 +158,10 @@ smart-library/
             ├── workflow/        # экспорт n8n workflow (book-rag-system.json)
             │   ├── import/      # dev-вариант workflow для импорта в контейнер n8n
             │   │   └── book-rag-system-dev.json
-            │   └── book-rag-system-dev.json  # OpenAI-вариант (генерируется скриптом)
+            │   └── book-rag-system-dev.json  # dev-вариант (генерируется скриптом)
             ├── scripts/         # start/verify/import/ingest/eval скрипты (PowerShell + python)
             │   ├── eval-rag.ps1  # прогон eval-набора: retrieve|agent, метрики, отчёт в evals/reports/
-            │   └── swap-gemini-to-openai.py  # Gemini → OpenAI: генерация dev-workflow для контейнера
+            │   └── make-dev-workflow.py  # Gemini остаётся основным, OpenAI добавляется как неподключённые spare-узлы
             ├── evals/           # **eval-набор** (контракт того, что считать хорошим ответом)
             │   ├── rag-eval-suite.json  # 21 вопрос: taste/self/author/genre/constraint/refuse, ожидаемые id
             │   └── reports/     # отчёты прогонов (JSON + Markdown), .gitignore кроме README

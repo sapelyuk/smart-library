@@ -45,6 +45,9 @@
   — намеренно изолирована в одном узле. Сейчас она делит ключ Gemini, а значит и квоту, с эмбеддингами;
   **Groq — это документированная альтернатива на бесплатном тарифе**, и он снова доступен из этой сети.
   См. ADR-005a.
+- **Dev workflow** (`book-rag-system-dev.json`): Gemini остаётся в потоке, но добавлены два **неподключённых spare-узла**
+  OpenAI (`Embeddings OpenAI (spare)` + `Chat Model OpenAI (spare)`). Чтобы переключиться на OpenAI — разорвите
+  связь Gemini-узлов в n8n UI и подключите spare-узлы. Оба типа генерируют 3072-мерные эмбеддинги.
 - **Доказано, а не предположение:** схема была применена к живому контейнеру (`ON_ERROR_STOP=1`, код выхода 0), все
   четыре функции были проверены на реальных строках, `EXPLAIN` подтверждает, что используется индекс HNSW,
   workflow импортируется и загружается в n8n без ошибок, и обе конечные точки моделей отвечают **HTTP 200** для ключей
@@ -97,7 +100,10 @@ n8n-rag-system/
     99-smoke-test.sql          15-step proof that the schema works (run this after changes)
     99-assertions.sql          exact expected-value checks for the read functions
   workflow/
-    book-rag-system.json       the importable n8n workflow (28 nodes, id BookRagSys2026)
+    book-rag-system.json       production export (Gemini, header auth)
+    book-rag-system-dev.json   dev variant: Gemini wired + OpenAI as disconnected spares
+    import/
+      book-rag-system-dev.json copy of dev variant (auto-imported by n8n container)
   samples/
     books.csv                  20 real books with descriptions, across 7 genres
   scripts/
@@ -107,6 +113,7 @@ n8n-rag-system/
     check-embedding-dim.ps1    asks the live API how wide its embeddings are
     ingest-catalogue.ps1       bulk-load a catalogue via the ingest webhook (idempotent)
     import-workflow.ps1        n8n CLI import helper (USE -Update to re-import)
+    make-dev-workflow.py       generates the dev variant: Gemini wired + OpenAI disconnected spares
     validate_workflow.py       structural checks on the workflow JSON - run after every edit
     eval-rag.ps1               quality gates: runs the eval suite, reports precision@k / recall@k / hit@k / MRR
     eval_metrics.py            re-scores a saved run, audits the suite - offline, no API key

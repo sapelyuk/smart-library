@@ -300,6 +300,8 @@ services:
       AI_N8N_HEADER_NAME: ${AI_N8N_HEADER_NAME:-x-book-rag-key}
       AI_N8N_HEADER_VALUE: ${AI_N8N_HEADER_VALUE:-}
       # pgvector store: inside the compose network the database is reachable by
+      # its service name, on the internal port 5432.
+      AI_RAG_STORE_DSN: host=ai-rag-db port=5432 user=${AI_RAG_DB_USER:-bookrag} password=${AI_RAG_DB_PASSWORD:-bookrag} dbname=${AI_RAG_DB_NAME:-bookrag} sslmode=disable
       AI_EMBEDDINGS_BASE_URL: ${AI_EMBEDDINGS_BASE_URL:-}
       AI_EMBEDDINGS_API_KEY: ${AI_EMBEDDINGS_API_KEY:-}
       AI_EMBEDDINGS_MODEL: ${AI_EMBEDDINGS_MODEL:-gemini-embedding-001}
