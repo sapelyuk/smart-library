@@ -1,10 +1,21 @@
 name: CI
 
+# Documentation-only changes do not affect what Build and Test verify, so
+# skip the whole workflow for them. Everything else (Go code, go.mod/go.sum,
+# go.work, compose, Dockerfiles, this workflow itself) still triggers both jobs.
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
 
 # Cancel in-flight runs for the same branch or PR.
 concurrency:
