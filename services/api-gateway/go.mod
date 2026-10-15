@@ -1,6 +1,6 @@
 module github.com/sapelyuk/smart-library/services/api-gateway
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0
