@@ -12,17 +12,20 @@ ENV GOTOOLCHAIN=local
 # to ../../pkg, so the go.work workspace is intentionally disabled here.
 ENV GOWORK=off
 
-# Build args: the module lives at services/api-gateway, and its replace
-# directive points to the pkg module at pkg/. The build context is the repo
-# root, which is required to resolve that replace.
+# Build args: the module lives at services/api-gateway. The build context is
+# the repo root, which is required to resolve the module's replace directives.
 ARG MODULE=services/api-gateway
 ARG BIN_NAME=api-gateway
 
-# Copy the shared pkg module first. It has no dependencies of its own (no
-# go.sum), and it changes far less often than the services, so this layer
-# stays cached across service rebuilds. The service's replace directive in
-# go.mod points at /pkg, so the module must exist before `go mod download`.
+# The gateway module replaces three sibling modules: pkg, book-service and
+# user-service, because its generated proto packages and auth code import
+# their generated proto packages. Every replace target has to exist at the
+# path the directive names before `go mod download` runs, otherwise Go cannot
+# resolve the build list. The paths mirror the repository layout, so
+# `../book-service` from /src lands on /book-service.
 COPY pkg/ /pkg/
+COPY services/book-service/go.mod services/book-service/go.sum /book-service/
+COPY services/user-service/go.mod services/user-service/go.sum /user-service/
 
 # Copy the service module definition and download its dependencies. This
 # layer stays cached as long as go.mod and go.sum are unchanged.
@@ -30,7 +33,11 @@ COPY ${MODULE}/go.mod ${MODULE}/go.sum /src/
 WORKDIR /src
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-# Copy the service source and build.
+# Now the sources. The generated proto packages of the sibling services are
+# imported by the gateway binary, so their code is needed to build it.
+COPY pkg/ /pkg/
+COPY services/book-service/ /book-service/
+COPY services/user-service/ /user-service/
 COPY ${MODULE}/ /src/
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
