@@ -48,7 +48,7 @@ smart-library/
 ├── KODA.md                      # этот файл
 ├── docker-compose.yml           # сервисы + БД + RabbitMQ + n8n: api-gateway (:8080), book/user/loan/notification/ai-service, book-db (:5434), user-db (:5432), loan-db (:5435), pgvector (:5436), n8n (:5679)
 ├── .dockerignore                # исключает .git, go.work, артефакты из контекста сборки
-├── .github/workflows/ci.yml     # CI: build + test (пять модулей + pkg-интеграция с RabbitMQ, coverage в step summary)
+├── .github/workflows/ci.yml     # CI: build + test (пять модулей + pkg-интеграция с RabbitMQ, coverage в step summary), paths-ignore для документации
 ├── docs/adr/
 │   ├── 0001-message-broker.md   # ADR: выбор RabbitMQ, модель событий, гарантии доставки
 │   └── 0002-ai-recommendation-architecture.md  # ADR: AI Service поверх n8n RAG, вариант C как развитие
@@ -195,7 +195,7 @@ Go-модуль `services/notification-service` **готов** (задача #48
 | Тесты Loan Service | домен, auth-интерцептор, сервис (с моками), PostgreSQL-репозиторий (против БД, `POSTGRES_TEST_DSN`, иначе skip), HTTP-слой (`httptest`) |
 | Notification Service | **готово** (issue #48): консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена |
 | gRPC-клиенты между сервисами, события, discovery | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); discovery: ADR-0003 (Kubernetes DNS); брокер: ADR-0001 (RabbitMQ); реализация событий — #14 (готово) |
-| CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28); в test-джобе RabbitMQ-сервис для интеграционного теста `pkg/events` |
+| CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28); в test-джобе RabbitMQ-сервис для интеграционного теста `pkg/events`; пропускает run при изменениях только в `**.md` и `docs/**` |
 | Контейнеризация | готово: multi-stage Dockerfile для book-, user-, loan- и ai-service, сервисы и БД в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6); n8n контейнер (`n8nio/n8n:2.40.7`) с автоимпортом dev-workflow из репо |
 | Событийная шина | ADR-0001 (RabbitMQ); локальный RabbitMQ в `docker-compose.yml`; `pkg/events` + amqp-транспорт готовы (issue #14); user-service публикует события, консьюмер-заготовка уведомлений до #48 |
 | AI Service: RAG-прототип | **работает end-to-end**: n8n + pgvector + Gemini, 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` (#22). Оценка качества: `evals/rag-eval-suite.json` (21 вопрос: taste/self/author/genre/constraint/refuse) + `scripts/eval-rag.ps1` + `scripts/eval_metrics.py` + `tests/` (53 offline-теста, pytest), метрики precision@k/recall@k/hit@k/MRR, офлайн-валидация набора без сети и API-ключей (`-ValidateOnly`) |

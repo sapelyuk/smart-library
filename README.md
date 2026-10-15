@@ -122,7 +122,7 @@ Smart Library AI является **первоклассным компонен�
 | Миграции User Service (`pkg/migrate`, embed FS)        | готовы, применяются при старте                         |
 | Локальный запуск сервисов                              | `cd services/api-gateway` (HTTP `:8080`) / `cd services/book-service` (gRPC `:8081`, REST `:8091`) / `cd services/user-service` (gRPC `:8082`, REST `:8092`) / `cd services/loan-service` (gRPC `:8083`, REST `:8093`) |
 | Контейнеризация (multi-stage Dockerfile + compose)    | готово — `#6` (PR #39); сервисы + 4 БД + RabbitMQ в `docker-compose.yml`, healthcheck `GET /healthz` |
-| CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book- и loan-service идут против сервис-контейнера `postgres:17` |
+| CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book- и loan-service идут против сервис-контейнера `postgres:17`; изменения только в документации (`**.md`, `docs/**`) CI не запускают (`paths-ignore`) |
 | OpenAPI/Swagger из proto-аннотаций                    | готово: `grpc-gateway` генерирует REST-маршруты и `swagger.json` (embed в сервисы) |
 | Событийная шина (`pkg/events` + RabbitMQ-транспорт)   | готово — `#14`: брокер-агностичные порты `Publisher`/`Subscriber`, конверт события (schema version), `pkg/events/amqp` (topic exchange, publisher confirms, ручной ack, reconnect, TTL+DLX), env-конфиг `RABBITMQ_URL`/`RABBITMQ_EXCHANGE` |
 | Продюсеры/консьюмеры доменных событий                 | готово — `#14`: user-service публикует `user.registered`/`user.status.changed`/`user.session.created`; консьюмер-заготовка уведомлений (`internal/consumer`) до `#48`; loan-service пока на `LogPublisher` |
