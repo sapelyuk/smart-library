@@ -24,10 +24,26 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+
+	"github.com/sapelyuk/smart-library/services/user-service/internal/domain"
 )
 
-// limitType classifies a public RPC into the bucket that applies.
-type limitType int
+// LimitType classifies a public RPC into the bucket that applies.
+type LimitType int
+
+const (
+	// LimitLogin covers /Login.
+	LimitLogin LimitType = iota
+	// LimitRegister covers /Register.
+	LimitRegister
+	// LimitChangePassword covers /ChangePassword.
+	LimitChangePassword
+	// LimitGlobal covers all other methods.
+	LimitGlobal
+)
+
+// limitType is the internal (lowercase) alias.
+type limitType = LimitType
 
 const (
 	limitLogin limitType = iota
@@ -204,8 +220,23 @@ func (rl *rateLimiter) allow(lt limitType, key string) bool {
 	return rl.global.allow(key)
 }
 
-// rateLimitConfig is the user-facing configuration for rate limiting.
-type rateLimitConfig struct {
+// ErrRateLimitExceeded is returned when the rate limiter rejects a request.
+var ErrRateLimitExceeded = domain.ErrRateLimitExceeded
+
+// RateLimitConfig is the user-facing configuration for rate limiting.
+type RateLimitConfig struct {
+	LoginRPS     float64
+	RegisterRPS  float64
+	ChangePwdRPS float64
+	GlobalRPS    float64
+	LoginBurst   int
+	RegisterBurst int
+	ChangePwdBurst int
+	GlobalBurst  int
+}
+
+// rateLimitConfig is the internal (lowercase) alias.
+type rateLimitConfig = RateLimitConfig
 	loginRPS     float64
 	registerRPS  float64
 	changePwdRPS float64
