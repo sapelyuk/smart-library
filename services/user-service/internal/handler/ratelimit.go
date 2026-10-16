@@ -11,7 +11,6 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -152,6 +151,10 @@ type rateLimiter struct {
 	log       *slog.Logger
 }
 
+// RateLimiter is the exported alias for rateLimiter, used by tests and
+// the composition root in cmd/server.
+type RateLimiter = rateLimiter
+
 // NewRateLimiter builds the limiter set from explicit configs (or defaults when
 // cfg is nil).
 func NewRateLimiter(cfg *rateLimitConfig, log *slog.Logger) *rateLimiter {
@@ -199,6 +202,9 @@ func methodType(fullMethod string) (limitType, string) {
 	}
 }
 
+// MethodType is the exported alias for methodType, used by tests.
+var MethodType = methodType
+
 // allow checks both the per-method and the global bucket for the given key.
 func (rl *rateLimiter) allow(lt limitType, key string) bool {
 	var m *limiter
@@ -237,48 +243,39 @@ type RateLimitConfig struct {
 
 // rateLimitConfig is the internal (lowercase) alias.
 type rateLimitConfig = RateLimitConfig
-	loginRPS     float64
-	registerRPS  float64
-	changePwdRPS float64
-	globalRPS    float64
-	loginBurst   int
-	registerBurst int
-	changePwdBurst int
-	globalBurst  int
-}
 
 // toLimits converts the typed config into the internal limitConfig slice.
 func (c *rateLimitConfig) toLimits() []limitConfig {
-	loginRPS := c.loginRPS
+	loginRPS := c.LoginRPS
 	if loginRPS <= 0 {
 		loginRPS = 2
 	}
-	registerRPS := c.registerRPS
+	registerRPS := c.RegisterRPS
 	if registerRPS <= 0 {
 		registerRPS = 1
 	}
-	changePwdRPS := c.changePwdRPS
+	changePwdRPS := c.ChangePwdRPS
 	if changePwdRPS <= 0 {
 		changePwdRPS = 2
 	}
-	globalRPS := c.globalRPS
+	globalRPS := c.GlobalRPS
 	if globalRPS <= 0 {
 		globalRPS = 100
 	}
 
-	loginBurst := c.loginBurst
+	loginBurst := c.LoginBurst
 	if loginBurst <= 0 {
 		loginBurst = 4
 	}
-	registerBurst := c.registerBurst
+	registerBurst := c.RegisterBurst
 	if registerBurst <= 0 {
 		registerBurst = 2
 	}
-	changePwdBurst := c.changePwdBurst
+	changePwdBurst := c.ChangePwdBurst
 	if changePwdBurst <= 0 {
 		changePwdBurst = 4
 	}
-	globalBurst := c.globalBurst
+	globalBurst := c.GlobalBurst
 	if globalBurst <= 0 {
 		globalBurst = 200
 	}
@@ -344,7 +341,7 @@ func NewRateLimitUnaryInterceptor(rl *rateLimiter) grpc.UnaryServerInterceptor {
 	}
 }
 
-// httpForwardedFor is an HTTP middleware that extracts the X-Forwarded-For header
+// HTTPForwardedFor is an HTTP middleware that extracts the X-Forwarded-For header
 // of a REST request and injects it into the gRPC metadata.
 //
 // This is necessary because grpc-gateway dials the local gRPC server via
@@ -352,7 +349,7 @@ func NewRateLimitUnaryInterceptor(rl *rateLimiter) grpc.UnaryServerInterceptor {
 // this bridge.  The middleware reads the first IP from X-Forwarded-For (the
 // end client) and writes it as the x-forwarded-for metadata key, which
 // clientIP() checks before falling back to the peer address.
-func httpForwardedFor(next http.Handler) http.Handler {
+func HTTPForwardedFor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		xff := r.Header.Get("X-Forwarded-For")
 		if xff == "" {

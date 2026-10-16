@@ -194,15 +194,15 @@ func run(cfg appConfig, log *slog.Logger) error {
 	// Build the rate limiter: it runs BEFORE the auth interceptor so that
 	// unauthenticated attackers are also throttled.  Zero config values mean
 	// the built-in defaults (see handler/ratelimit.go).
-	rlCfg := &handler.rateLimitConfig{
-		loginRPS:      cfg.rateLoginRPS,
-		registerRPS:   cfg.rateRegisterRPS,
-		changePwdRPS:  cfg.rateChangePwdRPS,
-		globalRPS:     cfg.rateGlobalRPS,
-		loginBurst:    cfg.rateLoginBurst,
-		registerBurst: cfg.rateRegisterBurst,
-		changePwdBurst: cfg.rateChangePwdBurst,
-		globalBurst:   cfg.rateGlobalBurst,
+	rlCfg := &handler.RateLimitConfig{
+		LoginRPS:      cfg.rateLoginRPS,
+		RegisterRPS:   cfg.rateRegisterRPS,
+		ChangePwdRPS:  cfg.rateChangePwdRPS,
+		GlobalRPS:     cfg.rateGlobalRPS,
+		LoginBurst:    cfg.rateLoginBurst,
+		RegisterBurst: cfg.rateRegisterBurst,
+		ChangePwdBurst: cfg.rateChangePwdBurst,
+		GlobalBurst:   cfg.rateGlobalBurst,
 	}
 
 	grpcServer := grpc.NewServer(
@@ -359,7 +359,7 @@ func startREST(cfg appConfig, grpcAddr net.Addr) (*http.Server, *grpc.ClientConn
 
 	server := &http.Server{
 		Addr:              cfg.httpAddr,
-		Handler:           withHealthEndpoint(handler.httpForwardedFor(restHandler)),
+		Handler:           withHealthEndpoint(handler.HTTPForwardedFor(restHandler)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
