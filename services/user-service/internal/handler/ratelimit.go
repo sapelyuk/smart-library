@@ -11,6 +11,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -228,6 +229,17 @@ func (rl *rateLimiter) allow(lt limitType, key string) bool {
 
 // ErrRateLimitExceeded is returned when the rate limiter rejects a request.
 var ErrRateLimitExceeded = domain.ErrRateLimitExceeded
+
+// IsRateLimitErr reports whether err is a rate-limit rejection.
+// It recognises both the domain error (wrapped through fmt.Errorf("%w"))
+// and the gRPC ResourceExhausted status code returned by the interceptor.
+func IsRateLimitErr(err error) bool {
+	if errors.Is(err, ErrRateLimitExceeded) {
+		return true
+	}
+	st, ok := status.FromError(err)
+	return ok && st.Code() == codes.ResourceExhausted
+}
 
 // RateLimitConfig is the user-facing configuration for rate limiting.
 type RateLimitConfig struct {
