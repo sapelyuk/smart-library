@@ -21,12 +21,13 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	pkgconfig "github.com/sapelyuk/smart-library/pkg/config"
+	pkgevents "github.com/sapelyuk/smart-library/pkg/events"
+	eventamqp "github.com/sapelyuk/smart-library/pkg/events/amqp"
 	"github.com/sapelyuk/smart-library/pkg/logger"
 	"github.com/sapelyuk/smart-library/pkg/migrate"
 	loanv1 "github.com/sapelyuk/smart-library/services/loan-service/gen/go/loan/v1"
 	"github.com/sapelyuk/smart-library/services/loan-service/internal/auth"
 	"github.com/sapelyuk/smart-library/services/loan-service/internal/bookclient"
-	"github.com/sapelyuk/smart-library/services/loan-service/internal/events"
 	"github.com/sapelyuk/smart-library/services/loan-service/internal/handler"
 	"github.com/sapelyuk/smart-library/services/loan-service/internal/repository/postgres"
 	"github.com/sapelyuk/smart-library/services/loan-service/internal/service"
@@ -153,9 +154,21 @@ func run(cfg appConfig, log *slog.Logger) error {
 
 	defer userConn.Close()
 
-	// Build the loan service on top of the repository, the book inventory
-	// client and the event publisher.
-	publisher := events.NewLogPublisher(log)
+	// Domain events travel through RabbitMQ (ADR-0001). The transport connects
+	// lazily and reconnects on its own, so a broker that is down at startup does
+	// not block startup; the events published while it is down are lost,
+	// which the best-effort async path accepts.
+	transport, err := eventamqp.New(pkgevents.ConfigFromEnv(), log)
+	if err != nil {
+		return fmt.Errorf("build event transport: %w", err)
+	}
+
+	defer transport.Close()
+
+	publisher, err := pkgevents.NewEventPublisher(transport)
+	if err != nil {
+		return fmt.Errorf("build event publisher: %w", err)
+	}
 
 	loanSvc, err := service.New(store, bookclient.New(bookConn), publisher, service.Config{
 		LoanPeriod: cfg.loanPeriod,

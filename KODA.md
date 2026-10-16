@@ -117,7 +117,7 @@ smart-library/
     │   │   ├── bookclient/      # gRPC-клиент book-service (BorrowCopy/ReturnCopy)
     │   │   ├── usersvc/         # gRPC-клиент user-service (AuthenticateToken)
     │   │   ├── auth/            # интерцептор: bearer-токен -> Principal + тесты
-    │   │   ├── events/          # порт событий (LogPublisher; перевод на pkg/events — follow-up)
+    │   │   ├── events/          # порт событий: Publisher interface + routing keys
     │   │   ├── testdb/          # провижининг тестовой БД: миграции, advisory-lock, truncate
     │   │   └── handler/         # grpc.go: прото <-> домен; http.go: gateway + Swagger UI + тесты
     │   └── migrations/          # 001_init.sql (loans, частичный unique на copy_id) + migrations.go
@@ -190,14 +190,14 @@ Go-модуль `services/notification-service` **готов** (задача #48
 | Хранилище User Service | PostgreSQL 17 в Docker (`database/sql` + `pgx/v5/stdlib`), миграции при старте |
 | Тесты User Service | домен, security (PR #11) и HTTP-слой (PR #26) — готово; сервис и репозиторий — нет |
 | API Gateway | **готово** (issue #10): reverse-proxy с gRPC-аутентификацией через user-service, маршрутизация по пути, `GATEWAY_*` env vars |
-| Loan Service | **готово** (issue #49): gRPC `:8083` + REST/Swagger `:8093`, выдача/возврат/продление, PostgreSQL 17 (`pgx/v5`), gRPC-клиенты к book- и user-service, auth-интерцептор, события `loan.*` через `LogPublisher` (перевод на `pkg/events` — follow-up) |
+| Loan Service | **готово** (issue #49): gRPC `:8083` + REST/Swagger `:8093`, выдача/возврат/продление, PostgreSQL 17 (`pgx/v5`), gRPC-клиенты к book- и user-service, auth-интерцептор, события `loan.*` через `pkg/events` + AMQP transport |
 | Публикация доменных событий (user-service) | **готово** (issue #14): `user.registered`/`user.status.changed`/`user.session.created` через `pkg/events` (best effort); консьюмер-заготовка уведомлений `internal/consumer` (durable-очередь `user.notifications.stub`, до #48); RabbitMQ-транспорт подключён в `cmd/server` |
 | Тесты Loan Service | домен, auth-интерцептор, сервис (с моками), PostgreSQL-репозиторий (против БД, `POSTGRES_TEST_DSN`, иначе skip), HTTP-слой (`httptest`) |
 | Notification Service | **готово** (issue #48): консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена |
 | gRPC-клиенты между сервисами, события, discovery | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); discovery: ADR-0003 (Kubernetes DNS); брокер: ADR-0001 (RabbitMQ); реализация событий — #14 (готово) |
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28); в test-джобе RabbitMQ-сервис для интеграционного теста `pkg/events`; пропускает run при изменениях только в `**.md` и `docs/**` |
 | Контейнеризация | готово: multi-stage Dockerfile для book-, user-, loan- и ai-service, сервисы и БД в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6); n8n контейнер (`n8nio/n8n:2.40.7`) с автоимпортом dev-workflow из репо |
-| Событийная шина | ADR-0001 (RabbitMQ); локальный RabbitMQ в `docker-compose.yml`; `pkg/events` + amqp-транспорт готовы (issue #14); user-service публикует события, консьюмер-заготовка уведомлений до #48 |
+| Событийная шина | ADR-0001 (RabbitMQ); локальный RabbitMQ в `docker-compose.yml`; `pkg/events` + amqp-транспорт готовы (issue #14); продюсеры: user-service (`user.*`) и loan-service (`loan.*`); консьюмер-заготовка уведомлений до #48 |
 | AI Service: RAG-прототип | **работает end-to-end**: n8n + pgvector + Gemini, 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` (#22). Оценка качества: `evals/rag-eval-suite.json` (21 вопрос: taste/self/author/genre/constraint/refuse) + `scripts/eval-rag.ps1` + `scripts/eval_metrics.py` + `tests/` (53 offline-теста, pytest), метрики precision@k/recall@k/hit@k/MRR, офлайн-валидация набора без сети и API-ключей (`-ValidateOnly`) |
 | AI Service: Go-адаптер `ai.v1.AiService` | **готово** (issue #23): gRPC/REST (`:8085`/`:8095`), n8n-клиент, pgvector-хранилище, консьюмер `book.*` из RabbitMQ; архитектура — ADR-0002 |
 

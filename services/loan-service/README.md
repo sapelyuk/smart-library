@@ -21,7 +21,7 @@ loan-service/
 │   ├── bookclient/        # gRPC-клиент book-service (резерв/освобождение экземпляра)
 │   ├── usersvc/           # gRPC-клиент user-service (проверка bearer-токена)
 │   ├── auth/              # интерцептор: токен -> Principal в контексте
-│   ├── events/            # порт событий (LogPublisher до появления pkg/events)
+│   ├── events/            # порт событий (Publisher interface + routing keys)
 │   ├── testdb/            # провижининг тестовой БД (миграции, advisory-lock)
 │   └── handler/           # grpc.go: прото <-> домен; http.go: gateway + Swagger UI
 └── migrations/            # SQL-схема PostgreSQL + embed для pkg/migrate
@@ -178,9 +178,8 @@ curl -X POST http://localhost:8093/v1/loans/<loan_id>/return -H "Authorization: 
 ## События
 
 Сервис публикует доменные события в порт `internal/events`. Реальный транспорт —
-RabbitMQ (ADR-0001, `docs/adr/0001-message-broker.md`); до появления
-`pkg/events` (issue #14) используется `LogPublisher`, который пишет события в
-лог. Имена (routing keys) уже зафиксированы:
+RabbitMQ (ADR-0001, `docs/adr/0001-message-broker.md`): события отправляются в
+topic exchange `library.events` через `pkg/events` AMQP transport.
 
 | Событие | Когда |
 | --- | --- |
@@ -263,7 +262,6 @@ book-service/паблишера), PostgreSQL-репозиторий против
 
 ## Ограничения текущей версии
 
-- События (RabbitMQ) — заглушка `LogPublisher` до реализации `pkg/events` (#14).
 - Нет фонового overdue-скана: `ListOverdue` вычисляет просрочку на лету,
   событие `loan.overdue` пока не публикуется.
 - API-gateway ещё не маршрутизирует `/v1/loans/*` на этот сервис.
