@@ -60,6 +60,18 @@ type appConfig struct {
 	seedPassword string
 	seedFullName string
 	seedPhone    string
+
+	// Rate limiting: tokens per second and burst size per method.
+	// Zero means the built-in defaults (login: 2 rps, register: 1 rps,
+	// change-password: 2 rps, global: 100 rps).
+	rateLoginRPS     float64
+	rateRegisterRPS  float64
+	rateChangePwdRPS float64
+	rateGlobalRPS    float64
+	rateLoginBurst   int
+	rateRegisterBurst int
+	rateChangePwdBurst int
+	rateGlobalBurst  int
 }
 
 func loadConfig() appConfig {
@@ -86,6 +98,15 @@ func loadConfig() appConfig {
 		seedPassword: pkgconfig.String("USER_SERVICE_SEED_LIBRARIAN_PASSWORD", ""),
 		seedFullName: pkgconfig.String("USER_SERVICE_SEED_LIBRARIAN_FULL_NAME", "Head Librarian"),
 		seedPhone:    pkgconfig.String("USER_SERVICE_SEED_LIBRARIAN_PHONE", ""),
+
+		rateLoginRPS:     pkgconfig.Float64("USER_SERVICE_RATE_LOGIN_RPS", 0),
+		rateRegisterRPS:  pkgconfig.Float64("USER_SERVICE_RATE_REGISTER_RPS", 0),
+		rateChangePwdRPS: pkgconfig.Float64("USER_SERVICE_RATE_CHANGE_PASSWORD_RPS", 0),
+		rateGlobalRPS:    pkgconfig.Float64("USER_SERVICE_RATE_GLOBAL_RPS", 0),
+		rateLoginBurst:   pkgconfig.Int("USER_SERVICE_RATE_LOGIN_BURST", 0),
+		rateRegisterBurst: pkgconfig.Int("USER_SERVICE_RATE_REGISTER_BURST", 0),
+		rateChangePwdBurst: pkgconfig.Int("USER_SERVICE_RATE_CHANGE_PASSWORD_BURST", 0),
+		rateGlobalBurst:  pkgconfig.Int("USER_SERVICE_RATE_GLOBAL_BURST", 0),
 	}
 }
 
@@ -170,8 +191,25 @@ func run(cfg appConfig, log *slog.Logger) error {
 	// real delivery: it keeps the subscribe path exercised end to end.
 	go consumer.RunNotificationStub(ctx, transport, log)
 
+	// Build the rate limiter: it runs BEFORE the auth interceptor so that
+	// unauthenticated attackers are also throttled.  Zero config values mean
+	// the built-in defaults (see handler/ratelimit.go).
+	rlCfg := &handler.RateLimitConfig{
+		LoginRPS:      cfg.rateLoginRPS,
+		RegisterRPS:   cfg.rateRegisterRPS,
+		ChangePwdRPS:  cfg.rateChangePwdRPS,
+		GlobalRPS:     cfg.rateGlobalRPS,
+		LoginBurst:    cfg.rateLoginBurst,
+		RegisterBurst: cfg.rateRegisterBurst,
+		ChangePwdBurst: cfg.rateChangePwdBurst,
+		GlobalBurst:   cfg.rateGlobalBurst,
+	}
+
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(handler.NewAuthUnaryInterceptor(userService)),
+		grpc.ChainUnaryInterceptor(
+			handler.NewRateLimitUnaryInterceptor(handler.NewRateLimiter(rlCfg, log)),
+			handler.NewAuthUnaryInterceptor(userService),
+		),
 	)
 
 	userv1.RegisterUserServiceServer(grpcServer, handler.New(userService, log))
@@ -321,7 +359,7 @@ func startREST(cfg appConfig, grpcAddr net.Addr) (*http.Server, *grpc.ClientConn
 
 	server := &http.Server{
 		Addr:              cfg.httpAddr,
-		Handler:           withHealthEndpoint(restHandler),
+		Handler:           withHealthEndpoint(handler.HTTPForwardedFor(restHandler)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,

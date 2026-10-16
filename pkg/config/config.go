@@ -69,3 +69,16 @@ func RequireString(key string) (string, error) {
 	}
 	return value, nil
 }
+
+// Float64 returns a float64 value of the environment variable or fallback.
+func Float64(key string, fallback float64) float64 {
+	value, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}

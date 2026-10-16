@@ -85,6 +85,7 @@ var codeByError = []struct {
 	{domain.ErrPermissionDenied, codes.PermissionDenied},
 	{domain.ErrDeactivated, codes.PermissionDenied},
 	{domain.ErrSelfLockout, codes.FailedPrecondition},
+	{domain.ErrRateLimitExceeded, codes.ResourceExhausted},
 }
 
 // toGRPC turns a use case error into a status error.

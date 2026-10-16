@@ -52,6 +52,11 @@ user-service/
   минимум `USER_SERVICE_PASSWORD_MIN_LENGTH` (12) символов и не менее трёх
   классов символов. Вход сравнивает пароль с фиктивной хеш-функцией, когда
   аккаунта нет, — время ответа не выдаёт существование e-mail.
+- **Rate limiting** — защита от CPU DoS через `argon2id` (~30 мс CPU на вызов).
+  Токен-бакет на ключ `(метод, IP)`. Работает до auth-интерцептора, поэтому
+  неаутентифицированные атакующие тоже лимитируются. HTTP-слой прокидывает
+  `X-Forwarded-For` в gRPC metadata, чтобы REST-запросы лимитировались по
+  реальному IP клиента, а не по loopback.
 
 ## Хранилище
 
@@ -145,6 +150,14 @@ go run ./cmd/server
 | `USER_SERVICE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `USER_SERVICE_LOG_FORMAT` | `json` | `json` или `text` |
 | `USER_SERVICE_SHUTDOWN_TIMEOUT` | `15s` | таймаут graceful shutdown |
+| `USER_SERVICE_RATE_LOGIN_RPS` | `2` | токены/сек на `/login` (0 = дефолт) |
+| `USER_SERVICE_RATE_LOGIN_BURST` | `4` | размер бакета для `/login` |
+| `USER_SERVICE_RATE_REGISTER_RPS` | `1` | токены/сек на `/register` |
+| `USER_SERVICE_RATE_REGISTER_BURST` | `2` | размер бакета для `/register` |
+| `USER_SERVICE_RATE_CHANGE_PASSWORD_RPS` | `2` | токены/сек на `/change-password` |
+| `USER_SERVICE_RATE_CHANGE_PASSWORD_BURST` | `4` | размер бакета для `/change-password` |
+| `USER_SERVICE_RATE_GLOBAL_RPS` | `100` | общий лимит на все запросы |
+| `USER_SERVICE_RATE_GLOBAL_BURST` | `200` | общий размер бакета |
 
 Сид библиотекаря — единственный способ завести первого администратора:
 `CreateUser` требует библиотекаря, поэтому без сида система регистрировалась бы,
@@ -272,6 +285,15 @@ go build ./...
 go vet ./...
 go test ./...
 ```
+
+## Тесты
+
+```bash
+cd user-service
+go test ./...
+```
+
+Покрытие: домен, security, HTTP-слой, rate limiter (gRPC interceptor, HTTP middleware, bucket exhaustion, IP separation, X-Forwarded-For bridging, global cap).
 
 ## Ограничения текущей версии
 

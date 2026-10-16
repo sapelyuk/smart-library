@@ -39,4 +39,9 @@ var (
 
 	ErrSessionNotFound = errors.New("session not found")
 	ErrSessionExpired  = errors.New("session expired")
+
+	// ErrRateLimitExceeded is returned when the caller has exceeded the
+	// allowed request rate.  The transport layer must translate this into
+	// gRPC codes.ResourceExhausted (HTTP 429).
+	ErrRateLimitExceeded = errors.New("rate limit exceeded")
 )
