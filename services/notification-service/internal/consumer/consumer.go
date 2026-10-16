@@ -16,11 +16,17 @@ import (
 
 	"github.com/sapelyuk/smart-library/pkg/events"
 	"github.com/sapelyuk/smart-library/services/notification-service/internal/domain"
-	"github.com/sapelyuk/smart-library/services/notification-service/internal/service"
 )
 
 // QueueName is the durable queue the notification service consumes from.
 const QueueName = "notification-service.loan-events"
+
+// Notifier is the interface the consumer uses to deliver built notifications.
+// The concrete implementation is *service.Service; the interface keeps this
+// package testable.
+type Notifier interface {
+	Notify(ctx context.Context, n *domain.Notification) error
+}
 
 // loanIssuedPayload mirrors the payload of a loan.issued event.
 type loanIssuedPayload struct {
@@ -51,7 +57,7 @@ type loanOverduePayload struct {
 // Run subscribes to loan.* events and processes them until ctx is canceled.
 // The subscription reconnects on its own (the amqp transport handles that),
 // so this function blocks until the context is done.
-func Run(ctx context.Context, subscriber events.Subscriber, svc *service.Service, log *slog.Logger) {
+func Run(ctx context.Context, subscriber events.Subscriber, svc Notifier, log *slog.Logger) {
 	cfg := events.QueueConfig{
 		Name:          QueueName,
 		Bindings:      []string{"loan.#"},
