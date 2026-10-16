@@ -8,17 +8,22 @@ import (
 	"log/slog"
 
 	"github.com/sapelyuk/smart-library/services/notification-service/internal/domain"
-	"github.com/sapelyuk/smart-library/services/notification-service/internal/email"
 )
+
+// MailSender delivers a single email message. The concrete implementation
+// lives in the email package; the interface keeps the service testable.
+type MailSender interface {
+	Send(ctx context.Context, to, subject, body string) error
+}
 
 // Service delivers notifications to readers.
 type Service struct {
-	sender *email.Sender
+	sender MailSender
 	log    *slog.Logger
 }
 
 // New builds the notification service.
-func New(sender *email.Sender, log *slog.Logger) *Service {
+func New(sender MailSender, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
 	}
