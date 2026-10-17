@@ -30,6 +30,7 @@ import (
 	eventamqp "github.com/sapelyuk/smart-library/pkg/events/amqp"
 	"github.com/sapelyuk/smart-library/pkg/logger"
 	"github.com/sapelyuk/smart-library/pkg/migrate"
+	"github.com/sapelyuk/smart-library/services/user-service/internal/cache"
 	userv1 "github.com/sapelyuk/smart-library/services/user-service/gen/go/user/v1"
 	"github.com/sapelyuk/smart-library/services/user-service/internal/consumer"
 	"github.com/sapelyuk/smart-library/services/user-service/internal/domain"
@@ -72,6 +73,12 @@ type appConfig struct {
 	rateRegisterBurst int
 	rateChangePwdBurst int
 	rateGlobalBurst  int
+
+	// Session cache.
+	cacheEnabled  bool
+	cacheTTL      time.Duration
+	cacheMissTTL  time.Duration
+	cacheMaxCost  int64
 }
 
 func loadConfig() appConfig {
@@ -107,6 +114,11 @@ func loadConfig() appConfig {
 		rateRegisterBurst: pkgconfig.Int("USER_SERVICE_RATE_REGISTER_BURST", 0),
 		rateChangePwdBurst: pkgconfig.Int("USER_SERVICE_RATE_CHANGE_PASSWORD_BURST", 0),
 		rateGlobalBurst:  pkgconfig.Int("USER_SERVICE_RATE_GLOBAL_BURST", 0),
+
+		cacheEnabled:  pkgconfig.String("USER_SERVICE_SESSION_CACHE_ENABLED", "true") == "true",
+		cacheTTL:      pkgconfig.Duration("USER_SERVICE_SESSION_CACHE_TTL", 60*time.Second),
+		cacheMissTTL:  pkgconfig.Duration("USER_SERVICE_SESSION_CACHE_MISS_TTL", 5*time.Second),
+		cacheMaxCost:  pkgconfig.Int64("USER_SERVICE_SESSION_CACHE_MAX_COST", 10000),
 	}
 }
 
@@ -176,6 +188,12 @@ func run(cfg appConfig, log *slog.Logger) error {
 			MinLength: cfg.minPassLen,
 		},
 		Logger: log,
+		SessionCache: cache.Config{
+			Enabled:  cfg.cacheEnabled,
+			TTL:      cfg.cacheTTL,
+			MissTTL:  cfg.cacheMissTTL,
+			MaxCost:  cfg.cacheMaxCost,
+		},
 	})
 	if err != nil {
 		return err

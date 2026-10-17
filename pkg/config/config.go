@@ -82,3 +82,16 @@ func Float64(key string, fallback float64) float64 {
 	}
 	return parsed
 }
+
+// Int64 returns an int64 value of the environment variable or fallback.
+func Int64(key string, fallback int64) int64 {
+	value, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
