@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/sapelyuk/smart-library/services/user-service/internal/cache"
 	"github.com/sapelyuk/smart-library/services/user-service/internal/domain"
 	"github.com/sapelyuk/smart-library/services/user-service/internal/events"
 	"github.com/sapelyuk/smart-library/services/user-service/internal/repository"
@@ -32,14 +33,16 @@ const (
 
 // Service is the use case layer of the user service.
 type Service struct {
-	users      repository.UserRepository
-	sessions   repository.SessionRepository
-	events     events.Publisher
-	policy     domain.PasswordPolicy
-	hashParams security.Parameters
-	sessionTTL time.Duration
-	now        func() time.Time
-	log        *slog.Logger
+	users        repository.UserRepository
+	sessions     repository.SessionRepository
+	events       events.Publisher
+	policy       domain.PasswordPolicy
+	hashParams   security.Parameters
+	sessionTTL   time.Duration
+	now          func() time.Time
+	log          *slog.Logger
+	cache        *cache.SessionCache
+	cacheMissTTL time.Duration
 }
 
 // Config carries the knobs the composition root decides about.
@@ -62,6 +65,9 @@ type Config struct {
 	// Logger receives the operational events of the use cases, nil means
 	// slog.Default.
 	Logger *slog.Logger
+
+	// SessionCache configures the local authentication cache.
+	SessionCache cache.Config
 }
 
 // New wires a service. The repositories and the event publisher are required,
@@ -103,15 +109,19 @@ func New(users repository.UserRepository, sessions repository.SessionRepository,
 		cfg.Logger = slog.Default()
 	}
 
+	cache := cache.NewSessionCache(cfg.SessionCache)
+
 	return &Service{
-		users:      users,
-		sessions:   sessions,
-		events:     publisher,
-		policy:     cfg.PasswordPolicy,
-		hashParams: cfg.HashParameters,
-		sessionTTL: cfg.SessionTTL,
-		now:        cfg.Now,
-		log:        cfg.Logger,
+		users:        users,
+		sessions:     sessions,
+		events:       publisher,
+		policy:       cfg.PasswordPolicy,
+		hashParams:   cfg.HashParameters,
+		sessionTTL:   cfg.SessionTTL,
+		now:          cfg.Now,
+		log:          cfg.Logger,
+		cache:        cache,
+		cacheMissTTL: cfg.SessionCache.MissTTL,
 	}, nil
 }
 
@@ -288,6 +298,8 @@ func (s *Service) Logout(ctx context.Context, caller domain.Principal) error {
 		return err
 	}
 
+	s.cache.InvalidateByUser(caller.UserID)
+
 	s.log.Info("user logged out", "user_id", caller.UserID, "session_id", caller.SessionID)
 
 	return nil
@@ -315,9 +327,24 @@ func (s *Service) AuthenticateSession(ctx context.Context, token string) (domain
 		return domain.Principal{}, nil, domain.ErrUnauthenticated
 	}
 
-	session, err := s.sessions.GetByTokenHash(ctx, security.HashToken(raw))
+	tokenHash := security.HashToken(raw)
+
+	// Check the cache first.
+	if principal, session, ok := s.cache.Get(tokenHash); ok {
+		if principal == nil {
+			// Cached miss (tombstone): token is unknown.
+			return domain.Principal{}, nil, domain.ErrUnauthenticated
+		}
+
+		return *principal, session, nil
+	}
+
+	session, err := s.sessions.GetByTokenHash(ctx, tokenHash)
 	if err != nil {
 		if errors.Is(err, domain.ErrSessionNotFound) {
+			// Cache the miss to protect against DoS.
+			s.cache.Set(tokenHash, nil, nil, s.now().UTC().Add(s.cacheMissTTL))
+
 			return domain.Principal{}, nil, domain.ErrUnauthenticated
 		}
 
@@ -348,12 +375,17 @@ func (s *Service) AuthenticateSession(ctx context.Context, token string) (domain
 		return domain.Principal{}, nil, domain.ErrDeactivated
 	}
 
-	return domain.Principal{
+	principal := domain.Principal{
 		UserID:    user.ID,
 		SessionID: session.ID,
 		Email:     user.Email,
 		Role:      user.Role,
-	}, session, nil
+	}
+
+	// Store in cache.
+	s.cache.Set(tokenHash, &principal, session, session.ExpiresAt)
+
+	return principal, session, nil
 }
 
 // GetCurrentUser returns the account behind the bearer token.
@@ -425,6 +457,8 @@ func (s *Service) UpdateUser(ctx context.Context, caller domain.Principal, id uu
 		if err := s.sessions.DeleteByUser(ctx, user.ID); err != nil {
 			return nil, err
 		}
+
+		s.cache.InvalidateByUser(user.ID)
 	}
 
 	s.log.Info("user updated", "user_id", user.ID, "by", caller.UserID)
@@ -492,6 +526,10 @@ func (s *Service) ChangePassword(
 		return nil, err
 	}
 
+	// Invalidate the cache for this user. The caller's current request already
+	// carries a valid principal, so a miss on the next request is acceptable.
+	s.cache.InvalidateByUser(user.ID)
+
 	s.log.Info("password changed", "user_id", user.ID, "by", caller.UserID, "by_owner", byOwner)
 
 	return user, nil
@@ -535,6 +573,8 @@ func (s *Service) changeStatus(ctx context.Context, caller domain.Principal, id 
 		if err := s.sessions.DeleteByUser(ctx, user.ID); err != nil {
 			return nil, err
 		}
+
+		s.cache.InvalidateByUser(user.ID)
 	}
 
 	s.log.Info("user status changed",

@@ -96,6 +96,7 @@ smart-library/
     │   ├── docs/                # user/v1/user.swagger.json (генерация) + docs.go (embed)
     │   ├── internal/
     │   │   ├── domain/          # User, Role, UserStatus, Email, PasswordPolicy, Session, Principal (RBAC)
+    │   │   ├── cache/           # in-memory кэш сессий (ristretto, issue #31)
     │   │   ├── security/        # argon2id (PHC), токены (base64url + SHA-256)
     │   │   ├── events/          # порт событий + типы/полезные нагрузки (user.registered и др.)
     │   │   ├── consumer/        # консьюмер-заготовка уведомлений (до Notification Service #48)
@@ -186,9 +187,9 @@ Go-модуль `services/notification-service` **готов** (задача #48
 | Тесты Book Service | домен, сервис и postgres-репозиторий — против PostgreSQL (`POSTGRES_TEST_DSN`, иначе skip), HTTP-слой — `httptest`; in-memory пакет удалён |
 | User Service: контракт, домен, security, сервис, handler, запуск | готов, собирается и работает |
 | REST-слой и Swagger User Service | готов: grpc-gateway на `:8092`, Swagger UI на `/swagger/` |
-| Аутентификация и RBAC | готово: argon2id-пароли, bearer-токены (в БД только SHA-256-хеш), сессии с TTL, роли READER/LIBRARIAN, интерцептор + проверки в домене |
+| Аутентификация и RBAC | готово: argon2id-пароли, bearer-токены (в БД только SHA-256-хеш), сессии с TTL, роли READER/LIBRARIAN, интерцептор + проверки в домене; **локальный in-memory кэш (ristretto) с TTL и miss-caching (issue #31)** |
 | Хранилище User Service | PostgreSQL 17 в Docker (`database/sql` + `pgx/v5/stdlib`), миграции при старте |
-| Тесты User Service | домен, security (PR #11) и HTTP-слой (PR #26) — готово; сервис и репозиторий — нет |
+| Тесты User Service | домен, security (PR #11) и HTTP-слой (PR #26) — готово; сервис и репозиторий — нет; **кэш сессий — готово (issue #31)** |
 | API Gateway | **готово** (issue #10): reverse-proxy с gRPC-аутентификацией через user-service, маршрутизация по пути, `GATEWAY_*` env vars |
 | Loan Service | **готово** (issue #49): gRPC `:8083` + REST/Swagger `:8093`, выдача/возврат/продление, PostgreSQL 17 (`pgx/v5`), gRPC-клиенты к book- и user-service, auth-интерцептор, события `loan.*` через `pkg/events` + AMQP transport |
 | Публикация доменных событий (user-service) | **готово** (issue #14): `user.registered`/`user.status.changed`/`user.session.created` через `pkg/events` (best effort); консьюмер-заготовка уведомлений `internal/consumer` (durable-очередь `user.notifications.stub`, до #48); RabbitMQ-транспорт подключён в `cmd/server` |
@@ -220,6 +221,7 @@ Go-модуль `services/notification-service` **готов** (задача #48
 - `user-service/internal/domain/principal.go` — RBAC: `RequireLibrarian`, `AccountAccess`, `UpdateAccess`, `PasswordChange`, `StatusChange` (включая запрет самоблокировки библиотекаря).
 - `user-service/internal/security/` — `password.go` (argon2id в PHC-формате, `DummyPasswordHash` для выравнивания времени входа) и `token.go` (случайный токен, в БД — SHA-256-хеш).
 - `user-service/internal/handler/interceptor.go` — извлечение Bearer-токена из metadata, публичные методы (`Register`, `Login`), кладо principal в контекст.
+- `user-service/internal/cache/session_cache.go` — in-memory кэш сессий (ristretto): hit/miss, TTL, miss-caching, инвалидация по user ID (issue #31).
 - `user-service/internal/events/events.go` — порт `Publisher` и типы событий (`user.registered`, `user.status.changed`, `user.session.created`) с полезными нагрузками; `internal/consumer/consumer.go` — консьюмер-заготовка уведомлений (durable-очередь `user.notifications.stub`, binding `user.#`) до Notification Service (#48). Публикация — в `internal/service` (best effort), транспорт собирается в `cmd/server`.
 - `user-service/migrations/` — `001_init.sql` в goose-формате + `migrations.go` с `//go:embed`; применяется `pkg/migrate` при старте.
 - `loan-service/README.md` — документация сервиса: методы API, env-переменные, RBAC, события, примеры.

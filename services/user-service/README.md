@@ -158,6 +158,10 @@ go run ./cmd/server
 | `USER_SERVICE_RATE_CHANGE_PASSWORD_BURST` | `4` | размер бакета для `/change-password` |
 | `USER_SERVICE_RATE_GLOBAL_RPS` | `100` | общий лимит на все запросы |
 | `USER_SERVICE_RATE_GLOBAL_BURST` | `200` | общий размер бакета |
+| `USER_SERVICE_SESSION_CACHE_ENABLED` | `true` | включить локальный кэш сессий |
+| `USER_SERVICE_SESSION_CACHE_TTL` | `60s` | срок жизни записи в кэше |
+| `USER_SERVICE_SESSION_CACHE_MISS_TTL` | `5s` | срок жизни miss-записи (защита от DoS) |
+| `USER_SERVICE_SESSION_CACHE_MAX_COST` | `10000` | максимальное число записей в кэше |
 
 Сид библиотекаря — единственный способ завести первого администратора:
 `CreateUser` требует библиотекаря, поэтому без сида система регистрировалась бы,
@@ -166,6 +170,34 @@ go run ./cmd/server
 
 Останов по `Ctrl+C` — graceful shutdown: снимается health-статус `SERVING`,
 закрывается HTTP-сервер, затем `GracefulStop` с таймаутом.
+
+## Кэш сессий
+
+Сервис использует локальный in-memory кэш (ristretto) для кэширования результатов
+аутентификации. Это снижает нагрузку на PostgreSQL: при попадании в кэш каждый
+запрос avoids двух round trip'ов (поиск сессии по token hash + загрузка пользователя).
+
+### Как это работает
+
+- **Hit:** principal извлекается из кэша — 0 запросов к БД.
+- **Miss:** выполняется полный путь (session → user), результат кэшируется.
+- **Miss cache:** при `ErrSessionNotFound` результат кэшируется на короткий TTL (5s по умолчанию) для защиты от DoS.
+- **Инвалидация:** кэш инвалидируется при `Logout`, `ChangePassword`, `DeactivateUser`, `RestoreUser`.
+
+### Настройки
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `USER_SERVICE_SESSION_CACHE_ENABLED` | `true` | включить/выключить кэш |
+| `USER_SERVICE_SESSION_CACHE_TTL` | `60s` | TTL успешных записей |
+| `USER_SERVICE_SESSION_CACHE_MISS_TTL` | `5s` | TTL miss-записей |
+| `USER_SERVICE_SESSION_CACHE_MAX_COST` | `10000` | максимальное число записей |
+
+### Целевое состояние
+
+Вариант A (Redis/KeyDB) — целевая архитектура для горизонтального масштабирования
+(issue #6). Вариант B (ristretto) — текущая реализация, не требует новой инфраструктуры.
+В обоих случаях обязателен переключатель и метрики hit/miss.
 
 ## REST API и Swagger
 
