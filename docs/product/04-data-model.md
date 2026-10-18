@@ -103,7 +103,7 @@ CREATE INDEX signal_events_reader_idx ON signals.signal_events (tenant_id, reade
 ### Таблица `reading_progress`
 
 ```sql
--- Phase 2. Прогресс чтения (публикует loan-service, consumer — book-service).
+-- Phase 1a (issue #95). Прогресс чтения (публикует loan-service, consumer — book-service).
 CREATE TABLE signals.reading_progress (
     id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id        UUID        NOT NULL,
@@ -435,7 +435,7 @@ CREATE POLICY tenant_isolation ON books
 | `wishlist` | book-service | `signals` | Phase 1 | ✅ |
 | `ratings` | book-service | `signals` | Phase 1 | ✅ |
 | `signal_events` | book-service | `signals` | Phase 1 | ✅ |
-| `reading_progress` | book-service | `signals` | Phase 2 | ✅ |
+| `reading_progress` | book-service | `signals` | Phase 1a (issue #95) | ✅ |
 | `clubs` | user-service | `clubs-db` | Phase 2 | ✅ |
 | `club_memberships` | user-service | `clubs-db` | Phase 2 | ✅ |
 | `club_posts` | user-service | `clubs-db` | Phase 2 | ✅ |
