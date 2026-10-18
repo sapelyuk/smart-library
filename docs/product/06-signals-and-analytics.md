@@ -10,14 +10,15 @@
 
 | Сигнал | Publisher | Consumer | Когда |
 | --- | --- | --- | --- |
-| `book.viewed` | frontend-web / frontend-app | book-service | Чтение карточки книги |
-| `book.wishlisted` | frontend-app | book-service | Добавление в wishlist |
-| `book.rated` | frontend-app | book-service | Оценка книги (1–5) |
-| `reading.progress` | frontend-app | book-service | Обновление прогресса чтения |
-| `ai.recommend.shown` | frontend-app | book-service | AI показал рекомендацию |
-| `ai.recommend.clicked` | frontend-app | book-service | Клик по рекомендованной книге |
+| `book.viewed` | book-service | book-service | Чтение карточки книги (`Get` use-case) |
+| `book.created` / `book.updated` / `book.deleted` | book-service | book-service | CRUD книг (use-case слой) |
+| `book.wishlisted` | book-service | book-service | Добавление в wishlist |
+| `book.rated` | book-service | book-service | Оценка книги (1–5) |
+| `reading.progress` | loan-service | book-service | Отчёт о прогрессе (`ReportReadingProgress`) |
+| `ai.recommend.shown` | ai-service | book-service | AI показал рекомендацию |
+| `ai.recommend.clicked` | ai-service | book-service | Клик по рекомендованной книге |
 
-> **`reading.progress` — особый случай:** publisher — **loan-service** (владелец выдач). Когда читатель открывает книгу (через frontend-app), loan-service публикует `reading.progress` с `loan_id`. Consumer — book-service, schema `signals.reading_progress`.
+> **`reading.progress` — особый случай:** publisher — **loan-service** (владелец выдач). Вызывается через RPC `ReportReadingProgress` (issue #95). Consumer — book-service, пишет в schema `signals.reading_progress`.
 
 ---
 
@@ -43,6 +44,8 @@
 
 ### Поля payload по типу события
 
+> **`payload` vs `metadata`:** `payload` — поле конверта события на проводе (`pkg/events/envelope.go`), `metadata` — колонка `signals.signal_events` в PostgreSQL. Consumer складывает в `metadata` остаток payload'а, а распознаваемые поля (`reader_id`, `book_id`, `copy_id`, `loan_id`, `tenant_id`) выносит в отдельные колонки (см. `04-data-model.md`).
+
 | Сигнал | Обязательные поля | Дополнительные поля |
 | --- | --- | --- |
 | `book.viewed` | `reader_id`, `book_id`, `tenant_id` | `source` (frontend-web/app/bot), `session_id`, `position` (процент прокрутки) |
@@ -65,14 +68,14 @@
 
 ```mermaid
 graph TB
-    subgraph "Publishers (отправляют сигналы в RabbitMQ)"
-        FEW["frontend-web\nNext.js"]
-        FEA["frontend-app\nVite PWA"]
+    subgraph "Publishers (публикуют сигналы в RabbitMQ)"
+        BS["book-service\n(Get/Create/Update/Delete,\nwishlist, ratings)"]
+        AIS["ai-service\n(Recommend, TrackRecommendClick)"]
         LS["loan-service\n(reading.progress)"]
     end
 
     subgraph "RabbitMQ"
-        RMQ["exchange: library.events\nrouting key: signal.#"]
+        RMQ["exchange: library.events\nrouting keys: book.#, loan.#,\nreading.#, ai.#"]
     end
 
     subgraph "Consumer"
@@ -83,28 +86,36 @@ graph TB
         DB["book-db\nschema: signals\nsignal_events / wishlist / ratings / reading_progress"]
     end
 
-    FEW -->|"publish book.viewed"| RMQ
-    FEA -->|"publish book.wishlisted"| RMQ
-    FEA -->|"publish book.rated"| RMQ
-    FEA -->|"publish ai.recommend.shown"| RMQ
-    FEA -->|"publish ai.recommend.clicked"| RMQ
+    BS -->|"publish book.viewed"| RMQ
+    BS -->|"publish book.wishlisted"| RMQ
+    BS -->|"publish book.rated"| RMQ
+    AIS -->|"publish ai.recommend.shown"| RMQ
+    AIS -->|"publish ai.recommend.clicked"| RMQ
     LS -->|"publish reading.progress"| RMQ
 
     RMQ --> BSC
     BSC -->|"INSERT"| DB
 ```
 
-### Publisher: frontend → API Gateway → RabbitMQ
+### Publisher: implicit (через бизнес-логику сервисов)
 
-1. Frontend (Next.js или Vite) вызывает `POST /v1/signals` через API Gateway (`:8080`).
-2. API Gateway проверяет токен через `AuthenticateToken` (user-service, gRPC).
-3. API Gateway маршрутизирует к book-service.
-4. Book-service (handler) валидирует payload, создаёт событие через `pkg/events.NewEvent()`.
-5. Событие публикуется в RabbitMQ через `EventPublisher.Publish()` (`pkg/events/eventpublisher.go`).
+В Phase 1 сигналы публикуются неявно — как побочный эффект бизнес-операций:
+
+| Сигнал | Задача | Механизм |
+| --- | --- | --- |
+| `book.viewed` | #89 (book-service) | `Get` в `internal/service` публикует событие после успешного чтения (best effort, вне транзакции) |
+| `book.created` / `book.updated` / `book.deleted` | #89 (book-service) | `Create`/`Update`/`Delete` публикуют события в том же use-case слое |
+| `book.wishlisted` | #90 (book-service) | `AddToWishlist` публикует через `pkg/events` |
+| `book.rated` | #91 (book-service) | `RateBook` публикует через `pkg/events` |
+| `ai.recommend.shown` | #94 (ai-service) | `Recommend` публикует через `pkg/events` |
+| `ai.recommend.clicked` | #94 (ai-service) | `TrackRecommendClick` публикует через `pkg/events` |
+| `reading.progress` | #95 (loan-service) | `ReportReadingProgress` публикует через `pkg/events` |
+
+**Frontend не вызывает отдельный endpoint для сигналов.** Сигналы — это события бизнес-операций: просмотр карточки книги, добавление в wishlist, оценка книги и т.д. Это упрощает фронтенд, исключает лишний HTTP-скоуп и снимает риск потери сигнала (например, если пользователь закроет вкладку до отправки отдельного запроса).
 
 ### Consumer: book-service → signals schema
 
-1. `internal/consumer/signals/` подписывается на `signal.#` через `pkg/events.Subscriber`.
+1. `internal/consumer/signals/` подписывается на `book.#`, `loan.#`, `reading.#`, `ai.#` через `pkg/events.Subscriber` (whitelist типов проверяется в обработчике — см. #92).
 2. Handler обрабатывает событие: декодирует payload, вставляет в соответствующую таблицу schema `signals`.
 3. При ошибке — `nack` без requeue (`pkg/events/amqp/transport.go` — poison message → DLX).
 

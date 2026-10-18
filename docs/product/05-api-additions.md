@@ -16,7 +16,7 @@
 ```proto
 rpc AddWishlistItem(AddWishlistItemRequest) returns (WishlistItem) {
   option (google.api.http) = {
-    post: "/v1/wishlist"
+    post: "/v1/wishlist/items"
     body: "*"
   };
 }
@@ -25,11 +25,11 @@ rpc AddWishlistItem(AddWishlistItemRequest) returns (WishlistItem) {
 | Параметр | Значение |
 | --- | --- |
 | Публичность | authenticated (READER) |
-| REST | `POST /v1/wishlist` |
+| REST | `POST /v1/wishlist/items` |
 | События | публикует `book.wishlisted` через `pkg/events` |
 
 ```json
-// Request (POST /v1/wishlist)
+// Request (POST /v1/wishlist/items)
 {
   "book_id": "550e8400-e29b-41d4-a716-446655440000"
 }
@@ -47,7 +47,7 @@ rpc AddWishlistItem(AddWishlistItemRequest) returns (WishlistItem) {
 ```proto
 rpc RemoveWishlistItem(RemoveWishlistItemRequest) returns (google.protobuf.Empty) {
   option (google.api.http) = {
-    delete: "/v1/wishlist/{book_id}"
+    delete: "/v1/wishlist/items/{book_id}"
   };
 }
 ```
@@ -55,7 +55,7 @@ rpc RemoveWishlistItem(RemoveWishlistItemRequest) returns (google.protobuf.Empty
 | Параметр | Значение |
 | --- | --- |
 | Публичность | authenticated (READER, только свой) |
-| REST | `DELETE /v1/wishlist/{book_id}` |
+| REST | `DELETE /v1/wishlist/items/{book_id}` |
 | События | нет |
 
 ### `ListWishlist`
@@ -77,7 +77,7 @@ rpc ListWishlist(ListWishlistRequest) returns (ListWishlistResponse) {
 ```proto
 rpc RateBook(RateBookRequest) returns (Rating) {
   option (google.api.http) = {
-    post: "/v1/ratings"
+    put: "/v1/ratings/{book_id}"
     body: "*"
   };
 }
@@ -86,13 +86,12 @@ rpc RateBook(RateBookRequest) returns (Rating) {
 | Параметр | Значение |
 | --- | --- |
 | Публичность | authenticated (READER, только свои) |
-| REST | `POST /v1/ratings` |
+| REST | `PUT /v1/ratings/{book_id}` |
 | События | публикует `book.rated` через `pkg/events` |
 
 ```json
-// Request
+// Request (PUT /v1/ratings/{book_id})
 {
-  "book_id": "550e8400-...",
   "score": 5,
   "review": "Отличная книга!"
 }

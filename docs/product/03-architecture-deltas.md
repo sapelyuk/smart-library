@@ -93,9 +93,9 @@ graph TB
 
 ### Что меняется
 
-- **Publisher:** фронтенды и loan-service публикуют сигналы в `library.events` через `pkg/events`.
-- **Consumer:** book-service (новый пакет `internal/consumer/signals/`) подписывается на `signal.#`, пишет в schema `signals` в `book-db`.
-- **События:** `book.viewed`, `book.wishlisted`, `book.rated`, `reading.progress`, `ai.recommend.shown`, `ai.recommend.clicked`.
+- **Publisher:** сервисы-владельцы бизнес-операций (book-service, ai-service, loan-service) публикуют сигналы в `library.events` через `pkg/events`; отдельного фронтендового endpoint нет (implicit publish, см. диаграмму ниже).
+- **Consumer:** book-service (новый пакет `internal/consumer/signals/`) подписывается на `book.#`, `loan.#`, `reading.#`, `ai.#`, пишет в schema `signals` в `book-db`.
+- **События:** `book.viewed`, `book.created`, `book.updated`, `book.deleted`, `book.wishlisted`, `book.rated`, `loan.issued`, `loan.returned`, `loan.overdue`, `reading.progress`, `ai.recommend.shown`, `ai.recommend.clicked`, `ai.chat.asked` (whitelist — #92).
 - **Владелец данных:** book-service (schema `signals` в `book-db`). Аналитика библиотекаря — read-only projection.
 
 ### Обоснование (Q2 A)
@@ -116,7 +116,8 @@ graph TB
 sequenceDiagram
     participant UI as frontend-web/app
     participant GW as api-gateway
-    participant AE as ai-service
+    participant US as user-service
+    participant BS as book-service
     participant EVT as RabbitMQ
              (library.events)
     participant SC as book-service
@@ -125,26 +126,25 @@ sequenceDiagram
              schema: signals
 
     UI->>GW: GET /v1/books/{id}
+    GW->>US: gRPC AuthenticateToken
+    US-->>GW: Principal
     GW->>BS: gRPC GetBook
     BS-->>GW: Book
-    GW-->>UI: Book (SSR)
 
-    Note over UI, GW: пользователь смотрит книгу
-    UI->>GW: POST /v1/signals (book.viewed)
-    GW->>AE: AuthenticateToken
-    AE-->>GW: Principal
-    GW->>BS: gRPC GetBook (для tenant_id)
-    BS-->>GW: Book {tenant_id}
-    GW->>LS: gRPC AuthenticateToken
-    LS-->>GW: Principal
-    GW->>EVT: publish book.viewed
-                   {user_id, book_id, tenant_id, timestamp}
+    Note over BS: implicit publish: use-case Get
+    BS->>EVT: publish book.viewed
+                   {book_id, tenant_id, occurred_at}
+
+    GW-->>UI: Book (SSR)
 
     EVT->>SC: consume book.viewed
     SC->>DB: INSERT INTO signals.signal_events
 
-    Note over UI: аналогично для wishlisted, rated,
-    ai.recommend.shown, ai.recommend.clicked
+    Note over UI: аналогично для wishlisted (#90), rated (#91),
+    ai.recommend.shown / clicked (#94), reading.progress (#95)
+```
+
+> **Implicit publish (решение ревью Run 1, M7).** Отдельного эндпоинта `POST /v1/signals` в Phase 1 нет: сигнал публикует тот же use-case, который выполняет бизнес-операцию (чтение карточки, добавление в wishlist, оценка, рекомендация, отчёт о прогрессе). Отдельный endpoint означал бы дублирующий скоуп (валидация payload, авторизация, маппинг типов), которого нет ни в одной задаче DAG.
 ```
 
 ### Tradeoffs

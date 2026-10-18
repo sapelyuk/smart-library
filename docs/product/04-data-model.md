@@ -26,7 +26,8 @@ CREATE TABLE signals.wishlist (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID        NOT NULL,
     reader_id   UUID        NOT NULL,
-    book_id     UUID        NOT NULL,
+    -- Тот же book-db: FK защищает от сирот, каскад чистит сигнал при удалении книги.
+    book_id     UUID        NOT NULL REFERENCES books (id) ON DELETE CASCADE,
     added_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Уведомление об доступности отправлено (идемпотентность).
     notified_at TIMESTAMPTZ,
@@ -48,7 +49,8 @@ CREATE TABLE signals.ratings (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID        NOT NULL,
     reader_id   UUID        NOT NULL,
-    book_id     UUID        NOT NULL,
+    -- Тот же book-db: FK защищает от сирот, каскад чистит рейтинг при удалении книги.
+    book_id     UUID        NOT NULL REFERENCES books (id) ON DELETE CASCADE,
     score       SMALLINT    NOT NULL CHECK (score BETWEEN 1 AND 5),
     review      TEXT        NOT NULL DEFAULT '',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -73,11 +75,14 @@ CREATE TABLE signals.signal_events (
     -- Идемпотентность: event_id из конверта pkg/events.
     event_id     UUID        NOT NULL,
     tenant_id    UUID        NOT NULL,
-    reader_id    UUID        NOT NULL,
+    reader_id    UUID,          -- nullable: book.created/updated/deleted без читателя
     event_type   VARCHAR(64) NOT NULL,
     book_id      UUID,
     -- Произвольные метаданные сигнала (source, position, session_id).
     metadata     JSONB       NOT NULL DEFAULT '{}',
+    -- Дополнительные поля для точечной фильтрации без JSON-парсинга.
+    copy_id      UUID,
+    loan_id      UUID,
     occurred_at  TIMESTAMPTZ NOT NULL,
     ingested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Идемпотентность: одно событие = одна запись.
@@ -85,7 +90,10 @@ CREATE TABLE signals.signal_events (
     CONSTRAINT signal_events_type_check CHECK (
         event_type IN (
             'book.viewed', 'book.wishlisted', 'book.rated',
-            'reading.progress', 'ai.recommend.shown', 'ai.recommend.clicked'
+            'book.created', 'book.updated', 'book.deleted',
+            'loan.issued', 'loan.returned', 'loan.overdue',
+            'reading.progress',
+            'ai.recommend.shown', 'ai.recommend.clicked', 'ai.chat.asked'
         )
     )
 );
