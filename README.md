@@ -5,7 +5,7 @@
 AI-рекомендациями книг на LLM/RAG (RAG-прототип работает).
 
 - **Бэкенд:** Go, gRPC + protobuf, grpc-gateway (REST/Swagger), PostgreSQL, RabbitMQ.
-- **Фронтенд (в плане):** React SPA, потребляющая REST-контракты сервисов.
+- **Фронтенд (в плане):** гибрид — Next.js витрина (`services/frontend-web/`) + Vite PWA кабинет (`services/frontend-app/`).
 - **AI:** рекомендации книг через LLM/RAG как часть архитектуры, а не надстройка.
   RAG-прототип **работает от начала до конца** (n8n + pgvector + Gemini, 20 книг
   проиндексировано) — см. раздел «AI-first подход» и `services/ai-service/rag/README.md`.
@@ -129,6 +129,7 @@ Smart Library AI является **первоклассным компонен�
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | **готово** — `#23`: gRPC/REST (`:8085`/`:8095`), клиент n8n-webhook (без генерации вне RAG), хранилище pgvector (`pgx/v5`), консьюмер `book.*` из RabbitMQ, Dockerfile + контейнер в `docker-compose.yml`; архитектура — ADR-0002 |
+| Продуктовое планирование Phase 1 (`docs/product/`)    | **готово**: 9 файлов (`00–08` — краткое описание, персоны, дорожная карта, архитектурные изменения, модель данных, API, сигналы, non-goals, метрики) + `09-phase1-issue-dag.md` (декомпозиция на задачи #89–#106, граф зависимостей) |
 | Notification Service                                   | **готово** — `#48`: консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена |
 | API Gateway                                            | готово — `#10` (gRPC-аутентификация через user-service, маршрутизация по пути, Dockerfile) |
 | Межсервисные gRPC-клиенты, discovery                  | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); gateway — user-service; discovery — `#8` |
@@ -261,6 +262,17 @@ smart-library/
 │   │   ├── 0001-message-broker.md  # решение по брокеру сообщений
 │   │   ├── 0002-ai-recommendation-architecture.md  # архитектура AI-сервиса
 │   │   └── 0003-service-discovery.md  # механизм обнаружения сервисов
+│   ├── product/         # продуктовая документация Phase 1 (B2B2C: книжные клубы)
+│   │   ├── 00-product-brief.md      # сегмент, JTBD, North Star
+│   │   ├── 01-personas.md           # 4 персоны
+│   │   ├── 02-roadmap.md            # фазы 1/2/3, scope, exit criteria
+│   │   ├── 03-architecture-deltas.md # архитектурные изменения
+│   │   ├── 04-data-model.md         # новые таблицы, tenant_id, миграции
+│   │   ├── 05-api-additions.md      # новые RPC, публичность
+│   │   ├── 06-signals-and-analytics.md # модель сигналов, приватность
+│   │   ├── 07-non-goals-and-risks.md # anti-scope, риски
+│   │   ├── 08-metrics.md            # North Star ASPWAR, воронки, пороги
+│   │   └── 09-phase1-issue-dag.md   # задачи #89–#106, граф зависимостей
 │   └── ai-first-principles.md  # принципы AI-first подхода
 ├── scripts/
 │   └── gen_proto.ps1    # кодогенерация protoc + go/go-grpc/grpc-gateway/openapiv2
