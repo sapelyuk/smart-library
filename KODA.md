@@ -263,7 +263,27 @@ Go-модуль `services/notification-service` **готов** (задача #48
 
 Нюанс с `gofmt -l`: в рабочем дереве (включён `core.autocrlf=true`) большинство отслеживаемых файлов — `book-service/*`, `user-service/*`, `api-gateway/*`, `pkg/config`, `pkg/logger` и т.д. — идут с **CRLF**, поэтому `gofmt -l` помечает их все, хотя содержимое отформатировано корректно (`gofmt -d` показывает различие только в концах строк). Не помечаются только файлы, созданные с LF (например, новые файлы `pkg/events/*`). Гонять `gofmt -w .` ради этого не нужно — это перепишет конца строк во всех файлах модуля; форматировать стоит точечно, в файлах где реально менялся код.
 
-Окружение: `go1.27.1 windows/amd64`; `protoc 36.2` лежит локально в `tools/protoc/bin/protoc.exe` (в системном PATH его нет); плагины `protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, `protoc-gen-openapiv2` установлены в `C:\Users\ThinkPro\go\bin`. GOPROXY доступен, Docker CLI есть, демон запущен. `gh` CLI v2.102.0 (авторизован, PATH через System). n8n 2.40.7 работает в контейнере `library-n8n` (хост-порт `:5679`), dev-workflow импортируется из репозитория при первом старте.
+Окружение: `go1.27.1 windows/amd64`; `protoc 36.2` лежит локально в `tools/protoc/bin/protoc.exe` (в системном PATH его нет); плагины `protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-grpc-gateway`, `protoc-gen-openapiv2` установлены в `C:\Users\ThinkPro\go\bin`. GOPROXY доступен, Docker CLI есть, демон запущен. `gh` CLI v2.102.0 (авторизован, PATH через System). n8n 2.40.7 работает в контейнере `library-n8n` (хост-порт `:5679`), dev-workflow импортируется из репозитория при первом старте. `xerj` v1.0.0-rc.96 установлен в `C:\Users\ThinkPro\AppData\Local\Programs\xerj\xerj.exe` (в пользовательском PATH).
+
+## Поиск по коду и reference coding (XERJ)
+
+Локальный поисковый движок XERJ (один бинарник, ES-совместимый REST `http://localhost:9200`, консоль `http://localhost:9200/_xerj-console/`). Назначение: **перед реализацией известного паттерна доставать готовое решение из индексированных эталонов**, а не писать с нуля; плюс быстрый поиск по самому проекту. Полный протокол — в скилле `.koda/skills/reference-coding/SKILL.md`.
+
+**Нода.** Dev-нода: `xerj --insecure --data-dir $env:LOCALAPPDATA\xerj-data` (data-dir вне репозиториев), фоновый запуск через `Start-Process`, PID в `$env:LOCALAPPDATA\xerj-node.pid`. Проверка живости — `GET /_cluster/health`. Эмбеддер **лексический** (не нейронный): искать по точным идентификаторам/терминам.
+
+**Корпуса** (индекс = `<prefix>-<dataset-slug>`; клоны эталонов — в `C:\Users\ThinkPro\Documents\GitHub\xerj-reference\`, вне git-репозитория):
+
+| Префикс | Эталон | Зачем |
+| --- | --- | --- |
+| `ax-*` | smart-library (рабочее дерево) | быстрый поиск по проекту без чтения файлов целиком |
+| `ww-*` | ThreeDotsLabs/wild-workouts-go-ddd-example (MIT) | ближайшая по архитектуре: Go DDD-микросервисы, gRPC между сервисами, RabbitMQ асинхронщина |
+| `wm-*` | ThreeDotsLabs/watermill (MIT) | Go pub/sub поверх RabbitMQ — аналог `pkg/events` (топики, ack, reconnect, delayed messages) |
+| `gw-*` | grpc-ecosystem/grpc-gateway (BSD-3) | аннотации `google.api.http`, маршрутизация REST, Swagger — наша связка в каждом сервисе |
+| `amqp-*` | rabbitmq/amqp091-go (BSD-2) | AMQP-клиент: publisher confirms, reconnect, consume — транспорт `pkg/events/amqp` |
+
+**Поиск.** По проекту: `xerj search "<символ или фраза>"` и `xerj def "<символ>"` из корня репозитория (ранжирует определения выше ссылок, печатает `file:line`). По эталонам: `POST /<prefix>-*/_search` с defs-first `bool`-запросом (`multi_match` по `body`+`defs` + `match_phrase` по `defs` с boost), обязательна проекция `"_source":["ax_path"]` и `"fields":["_passage"]` (без неё — целые файлы в ответе). Находку цитировать `репозиторий/файл:строка`; дословное копирование — только с учётом лицензии эталона.
+
+**Обновление индексов.** `xerj autoindex <папка> --url http://127.0.0.1:9200 --prefix <px> --state-dir $env:LOCALAPPDATA\xerj-state\<px>` — идемпотентно (журнал + идемпотентные `_id`), повторный запуск докачивает изменившееся; код выхода `3` = успех с пропущенными файлами. Для проекта `<папка>` = корень репозитория, `<px>` = `ax`. Новый эталон: клон в `xerj-reference\`, свободный префикс, обновление таблицы здесь и в скилле.
 
 ## Правила разработки
 
