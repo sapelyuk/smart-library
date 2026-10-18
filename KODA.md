@@ -31,13 +31,14 @@
 
 | Этап | Что реализовано | Статус |
 | --- | --- | --- |
-| Бэкенд-сервисы | Book Service, User Service, API Gateway, RabbitMQ | ✅ готово |
-| Фронтенд | React SPA, потребляющая REST-контракты сервисов | 🔜 в плане |
-| AI-модуль | AI Service: ADR-0002 + RAG-прототип (n8n + pgvector + Gemini) | ✅ готово (#22, #23) |
+| Бэкенд-сервисы | Book Service, User Service, API Gateway, Loan Service, Notification Service, AI Service | ✅ готово |
+| Продуктовое планирование | Discovery Phase 1 (`docs/product/00–08`), декомпозиция на задачи #89–#106 (`docs/product/09-phase1-issue-dag.md`) | ✅ готово |
+| Фронтенд | Гибрид (Q1): Next.js витрина `services/frontend-web/` + Vite PWA кабинет `services/frontend-app/` | 🔜 задачи #97–#101 |
+| AI-модуль | AI Service: ADR-0002 + RAG-прототип (n8n + pgvector + Gemini) | ✅ готово (#22, #23); поиск/объяснение — #93, #94 |
 | Discovery | Kubernetes DNS (Docker Compose DNS локально) | 📋 ADR-0003 принято |
 | CI/CD | GitHub Actions (CI: build + test), контейнеризация | 🟡 CI готов (PR #28), контейнеризация готова (#6); CD — в плане |
 
-**Приоритет:** фронтенд → AI-модуль → discovery → CI/CD.
+**Приоритет:** Phase 1a (читательский путь: #89–#102) → Phase 1b (каналы доставки: #103–#106) → discovery → CD.
 
 ## Структура каталога (фактическое состояние)
 
@@ -52,6 +53,17 @@ smart-library/
 ├── docs/adr/
 │   ├── 0001-message-broker.md   # ADR: выбор RabbitMQ, модель событий, гарантии доставки
 │   └── 0002-ai-recommendation-architecture.md  # ADR: AI Service поверх n8n RAG, вариант C как развитие
+├── docs/product/                # продуктовая документация Phase 1 (B2B2C: книжные клубы при публичных библиотеках)
+│   ├── 00-product-brief.md      # сегмент, JTBD, North Star
+│   ├── 01-personas.md           # 4 персоны
+│   ├── 02-roadmap.md            # фазы 1/2/3, scope, exit criteria
+│   ├── 03-architecture-deltas.md # архитектурные изменения относительно текущего состояния
+│   ├── 04-data-model.md         # новые таблицы, tenant_id, миграции
+│   ├── 05-api-additions.md      # новые RPC, публичность, примеры
+│   ├── 06-signals-and-analytics.md # модель сигналов, приватность
+│   ├── 07-non-goals-and-risks.md # anti-scope, риски, митигации
+│   ├── 08-metrics.md            # North Star ASPWAR, воронки, пороги
+│   └── 09-phase1-issue-dag.md   # декомпозиция Phase 1 на задачи #89–#106, граф зависимостей
 ├── scripts/
 │   └── gen_proto.ps1            # перегенерация кода (protoc + 4 плагина)
 ├── third_party/                 # внешние .proto: google/api, protoc-gen-openapiv2/options

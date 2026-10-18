@@ -1,19 +1,20 @@
 # Smart Library
 
 Полнофункциональная платформа управления библиотекой: **монорепозиторий** с
-бэкендом на Go (gRPC-микросервисы), планируемым React-приложением и
-AI-рекомендациями книг на LLM/RAG (RAG-прототип работает).
+бэкендом на Go (gRPC-микросервисы), React-приложением в Phase 1 (витрина + кабинет)
+и AI-рекомендациями книг на LLM/RAG (RAG-прототип работает).
 
 - **Бэкенд:** Go, gRPC + protobuf, grpc-gateway (REST/Swagger), PostgreSQL, RabbitMQ.
-- **Фронтенд (в плане):** React SPA, потребляющая REST-контракты сервисов.
+- **Фронтенд:** Discovery Phase 1 завершен (PR #108, `docs/product/`), реализация — Phase 1a/1b (задачи #89–#106): Next.js витрина (`services/frontend-web/`) + Vite PWA кабинет (`services/frontend-app/`).
 - **AI:** рекомендации книг через LLM/RAG как часть архитектуры, а не надстройка.
   RAG-прототип **работает от начала до конца** (n8n + pgvector + Gemini, 20 книг
   проиндексировано) — см. раздел «AI-first подход» и `services/ai-service/rag/README.md`.
   Go-адаптер сервиса (`ai.v1.AiService`) **готов** (issue #23): gRPC `:8085`,
   REST + Swagger `:8095`, pgvector-хранилище, консьюмер `book.*` из RabbitMQ.
 
-Проект в активной разработке: бэкенд-сервисы, RAG-прототип и Go-адаптер AI-сервиса
-работают; фронтенд и Notification Service — следующие этапы.
+Проект в активной разработке: бэкенд-сервисы (включая Notification Service),
+RAG-прототип и Go-адаптер AI-сервиса работают; фронтенд — Phase 1a (задачи #97–#101,
+`docs/product/02-roadmap.md`).
 
 ## Архитектура
 
@@ -129,6 +130,8 @@ Smart Library AI является **первоклассным компонен�
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | **готово** — `#23`: gRPC/REST (`:8085`/`:8095`), клиент n8n-webhook (без генерации вне RAG), хранилище pgvector (`pgx/v5`), консьюмер `book.*` из RabbitMQ, Dockerfile + контейнер в `docker-compose.yml`; архитектура — ADR-0002 |
+| Продуктовое планирование Phase 1 (`docs/product/`)    | **готово**: 9 файлов (`00–08` — краткое описание, персоны, дорожная карта, архитектурные изменения, модель данных, API, сигналы, non-goals, метрики) + `09-phase1-issue-dag.md` (декомпозиция на задачи #89–#106, граф зависимостей) |
+| Продуктовые задачи Phase 1                             | Phase 1a (#89–#102) — ядро: сигналы, фронтенд, AI-чат, wishlist, E2E. Phase 1b (#103–#106) — Telegram, e-mail-доставка, проверка rate limiting. DAG: `docs/product/09-phase1-issue-dag.md` |
 | Notification Service                                   | **готово** — `#48`: консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена |
 | API Gateway                                            | готово — `#10` (gRPC-аутентификация через user-service, маршрутизация по пути, Dockerfile) |
 | Межсервисные gRPC-клиенты, discovery                  | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); gateway — user-service; discovery — `#8` |
@@ -177,7 +180,7 @@ export AI_CATALOG_GRPC_ADDR='localhost:8081'
 export AI_USER_GRPC_ADDR='localhost:8082'
 export AI_N8N_BASE_URL='http://localhost:5678/webhook/rag'
 export AI_N8N_HEADER_VALUE='<ключ RAG-цепочки>'
-export AI_RAG_STORE_DSN='host=localhost port=5433 user=bookrag password=bookrag dbname=bookrag sslmode=disable'
+export AI_RAG_STORE_DSN='host=localhost port=5436 user=bookrag password=bookrag dbname=bookrag sslmode=disable'
 go run ./cmd/server     # gRPC на :8085, REST + Swagger на :8095
 ```
 
@@ -214,7 +217,7 @@ docker compose down -v          # остановить и удалить volume
 | `book-db` | `postgres:17` | `5434` |
 | `user-db` | `postgres:17` | `5432` |
 | `loan-db` | `postgres:17` | `5435` |
-| `ai-rag-db` | `pgvector/pgvector:pg17` | `5433` |
+| `ai-rag-db` | `pgvector/pgvector:pg17` | `5436` |
 | `rabbitmq` | `rabbitmq:4-management` | `5672`, `15672` |
 
 Контейнеры создаются с префиксом `library-` (через `container_name` в `docker-compose.yml`): `library-api-gateway`, `library-book-service`, `library-user-service`, `library-loan-service`, `library-ai-service`, `library-book-db`, `library-user-db`, `library-loan-db`, `library-ai-rag-db`, `library-rabbitmq`.
@@ -253,7 +256,7 @@ smart-library/
 ├── go.work              # воркспейс: ./services/api-gateway, ./services/book-service, ./services/user-service, ./services/loan-service, ./services/notification-service, ./pkg
 ├── README.md            # этот файл
 ├── KODA.md              # контекст репозитория для AI-сессий
-├── docker-compose.yml   # сервисы + БД + RabbitMQ: api-gateway (:8080), book/user/loan-service, book-db (:5434), user-db (:5432), loan-db (:5435), pgvector (:5433)
+├── docker-compose.yml   # сервисы + БД + RabbitMQ: api-gateway (:8080), book/user/loan-service, book-db (:5434), user-db (:5432), loan-db (:5435), pgvector (:5436)
 ├── .dockerignore        # исключает .git, go.work, артефакты из контекста сборки
 ├── .github/workflows/   # CI: build + test (ci.yml)
 ├── docs/
@@ -261,6 +264,17 @@ smart-library/
 │   │   ├── 0001-message-broker.md  # решение по брокеру сообщений
 │   │   ├── 0002-ai-recommendation-architecture.md  # архитектура AI-сервиса
 │   │   └── 0003-service-discovery.md  # механизм обнаружения сервисов
+│   ├── product/         # продуктовая документация Phase 1 (B2B2C: книжные клубы)
+│   │   ├── 00-product-brief.md      # сегмент, JTBD, North Star
+│   │   ├── 01-personas.md           # 4 персоны
+│   │   ├── 02-roadmap.md            # фазы 1/2/3, scope, exit criteria
+│   │   ├── 03-architecture-deltas.md # архитектурные изменения
+│   │   ├── 04-data-model.md         # новые таблицы, tenant_id, миграции
+│   │   ├── 05-api-additions.md      # новые RPC, публичность
+│   │   ├── 06-signals-and-analytics.md # модель сигналов, приватность
+│   │   ├── 07-non-goals-and-risks.md # anti-scope, риски
+│   │   ├── 08-metrics.md            # North Star ASPWAR, воронки, пороги
+│   │   └── 09-phase1-issue-dag.md   # задачи #89–#106, граф зависимостей
 │   └── ai-first-principles.md  # принципы AI-first подхода
 ├── scripts/
 │   └── gen_proto.ps1    # кодогенерация protoc + go/go-grpc/grpc-gateway/openapiv2
