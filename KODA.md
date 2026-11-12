@@ -2,7 +2,7 @@
 
 ## Обзор проекта
 
-**Smart Library** — полнофункциональная платформа управления библиотекой: монорепо с бэкендом на Go (gRPC-микросервисы), планируемым React-приложением и AI-рекомендациями книг на LLM/RAG. Реализовано: **Book Service полностью рабочий** (gRPC-API, REST и Swagger через grpc-gateway, домен, бизнес-логика, PostgreSQL-хранилище, тесты), **User Service рабочий** (gRPC-API, REST и Swagger, регистрация/вход, хеширование паролей, сессии, ролевая модель, PostgreSQL-хранилище, миграции, unit-тесты домена и security, публикация доменных событий), **API Gateway рабочий** (единая HTTP-точка входа, маршрутизация к сервисам, gRPC-аутентификация через user-service), **Loan Service рабочий** (выдача/возврат/продление, gRPC-клиенты к book- и user-service, PostgreSQL), **Notification Service рабочий** (консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена), **AI Service рабочий** (gRPC :8085 + REST/Swagger :8095, домен, n8n-клиент, pgvector-хранилище, консьюмер `book.*` из RabbitMQ, unit-тесты домена), **RAG-прототип AI-модуля работает** (n8n + pgvector + Gemini, 20 книг проиндексировано), общий модуль `pkg` (logger, config, migrate, events) и **событийная шина на RabbitMQ** (`pkg/events` + amqp-транспорт: publisher confirms, ручной ack, reconnect, TTL+DLX).
+**Smart Library** — полнофункциональная платформа управления библиотекой: монорепо с бэкендом на Go (gRPC-микросервисы), планируемым React-приложением и AI-рекомендациями книг на LLM/RAG. Реализовано: **Book Service полностью рабочий** (gRPC-API, REST и Swagger через grpc-gateway, домен, бизнес-логика, PostgreSQL-хранилище, тесты, публикация `book.*`), **User Service рабочий** (gRPC-API, REST и Swagger, регистрация/вход, хеширование паролей, сессии, ролевая модель, PostgreSQL-хранилище, миграции, unit-тесты домена и security, публикация доменных событий), **API Gateway рабочий** (единая HTTP-точка входа, маршрутизация к сервисам, gRPC-аутентификация через user-service), **Loan Service рабочий** (выдача/возврат/продление, gRPC-клиенты к book- и user-service, PostgreSQL), **Notification Service рабочий** (консьюмер `loan.*` из RabbitMQ, SMTP-транспорт, REST/Swagger, unit-тесты домена), **AI Service рабочий** (gRPC :8085 + REST/Swagger :8095, домен, n8n-клиент, pgvector-хранилище, консьюмер `book.*` из RabbitMQ, unit-тесты домена), **RAG-прототип AI-модуля работает** (n8n + pgvector + Gemini, 20 книг проиндексировано), общий модуль `pkg` (logger, config, migrate, events) и **событийная шина на RabbitMQ** (`pkg/events` + amqp-транспорт: publisher confirms, ручной ack, reconnect, TTL+DLX).
 
 - **Назначение:** каталог книг, учёт читателей и библиотекарей, выдача/возврат книг, уведомления о сроках возврата, единая точка входа для клиентов.
 - **Язык и стек:** Go (локально установлен `go1.27.1 windows/amd64`), gRPC, protobuf, `log/slog`, PostgreSQL (`pgx/v5` в book-service, `pgx/v5/stdlib` в user-service); брокер — RabbitMQ (`amqp091-go`, ADR-0001), discovery — Kubernetes DNS (ADR-0003); фронтенд — React (в плане); AI-модуль — LLM/RAG (прототип работает, Go-адаптер в плане).
@@ -94,7 +94,9 @@ smart-library/
     │   ├── docs/                # book/v1/book.swagger.json (генерация) + docs.go (embed)
     │   ├── internal/
     │   │   ├── domain/          # Book, Copy, CopyStatus, ISBN, ошибки + тесты
-    │   │   ├── service/         # BookService (use-case'ы) + тесты против PostgreSQL
+    │   │   ├── events/          # контракты событий book.created/updated/deleted/viewed
+    │   │   ├── service/         # BookService (use-case'ы) + тесты
+    │   │   ├── tenant/          # статический Phase 1 tenant из BOOK_SERVICE_DEFAULT_TENANT_ID
     │   │   ├── repository/      # контракты + postgres/ (pgx/v5, единственная реализация)
     │   │   ├── testdb/          # провижининг тестовой БД: миграции, advisory-lock, truncate
     │   │   └── handler/         # grpc.go: прото <-> домен; http.go: gateway + Swagger UI
@@ -192,7 +194,7 @@ Go-модуль `services/notification-service` **готов** (задача #48
 | --- | --- |
 | `pkg/logger`, `pkg/config`, `pkg/migrate` | готово, используется обоими сервисами |
 | `pkg/events` (порты + конверт + amqp-транспорт) | **готово** (issue #14): брокер-агностичные `Publisher`/`Subscriber`, конверт события с `schema_version`, `pkg/events/amqp` (topic exchange, publisher confirms, ручной ack, reconnect, TTL+DLX), unit-тесты + интеграционный тест против RabbitMQ (`RABBITMQ_TEST_URL`, иначе skip) |
-| Book Service: контракт, домен, сервис, handler, запуск | готов, собирается и работает |
+| Book Service: контракт, домен, сервис, handler, запуск | готов; публикует `book.created`/`book.updated`/`book.deleted`/`book.viewed` через `pkg/events` |
 | REST-слой и Swagger Book Service | готов: grpc-gateway на `:8091`, Swagger UI на `/swagger/` |
 | Хранилище Book Service | **PostgreSQL 17** (`pgx/v5/stdlib`), единственная реализация; `BOOK_SERVICE_DB_DSN` обязателен |
 | PostgreSQL-реализация репозитория Book Service | **готово** (issue #9, PG 17 + `pgx/v5`): `AcquireAvailable` через `FOR UPDATE SKIP LOCKED` + `FOR SHARE`, миграции через `pkg/migrate` при старте |
@@ -210,7 +212,7 @@ Go-модуль `services/notification-service` **готов** (задача #48
 | gRPC-клиенты между сервисами, события, discovery | loan-service вызывает book-service (`BorrowCopy`/`ReturnCopy`) и user-service (`AuthenticateToken`); discovery: ADR-0003 (Kubernetes DNS); брокер: ADR-0001 (RabbitMQ); реализация событий — #14 (готово) |
 | CI | GitHub Actions: build + test с кэшем модулей и coverage в step summary (PR #28); в test-джобе RabbitMQ-сервис для интеграционного теста `pkg/events`; пропускает run при изменениях только в `**.md` и `docs/**` |
 | Контейнеризация | готово: multi-stage Dockerfile для book-, user-, loan- и ai-service, сервисы и БД в `docker-compose.yml`, healthcheck на `GET /healthz` (issue #6); n8n контейнер (`n8nio/n8n:2.40.7`) с автоимпортом dev-workflow из репо |
-| Событийная шина | ADR-0001 (RabbitMQ); локальный RabbitMQ в `docker-compose.yml`; `pkg/events` + amqp-транспорт готовы (issue #14); продюсеры: user-service (`user.*`) и loan-service (`loan.*`); консьюмер-заготовка уведомлений до #48 |
+| Событийная шина | ADR-0001 (RabbitMQ); локальный RabbitMQ в `docker-compose.yml`; `pkg/events` + amqp-транспорт готовы (issue #14); продюсеры: book-service (`book.*`, issue #89), user-service (`user.*`) и loan-service (`loan.*`) |
 | AI Service: RAG-прототип | **работает end-to-end**: n8n + pgvector + Gemini, 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; артефакты в `services/ai-service/rag/` (#22). Оценка качества: `evals/rag-eval-suite.json` (21 вопрос: taste/self/author/genre/constraint/refuse) + `scripts/eval-rag.ps1` + `scripts/eval_metrics.py` + `tests/` (53 offline-теста, pytest), метрики precision@k/recall@k/hit@k/MRR, офлайн-валидация набора без сети и API-ключей (`-ValidateOnly`) |
 | AI Service: Go-адаптер `ai.v1.AiService` | **готово** (issue #23): gRPC/REST (`:8085`/`:8095`), n8n-клиент, pgvector-хранилище, консьюмер `book.*` из RabbitMQ; архитектура — ADR-0002 |
 

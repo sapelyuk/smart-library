@@ -79,12 +79,12 @@ func handler(svc *service.Service, log *slog.Logger) events.Handler {
 	return func(ctx context.Context, msg events.Message) error {
 		log := log.With(slog.String("event_type", msg.RoutingKey))
 
-		var event BookEvent
-		if err := json.Unmarshal(msg.Body, &event); err != nil {
+		event, err := decodeBookEvent(msg)
+		if err != nil {
 			// A payload this service cannot read will not become readable by being
 			// retried, so it goes straight to the dead-letter queue.
-			log.Error("ai consumer: cannot parse event payload", "error", err)
-			return fmt.Errorf("ai consumer: parse %s payload: %w", msg.RoutingKey, err)
+			log.Error("ai consumer: cannot parse event envelope", "error", err)
+			return err
 		}
 
 		if event.BookID == "" {
@@ -127,4 +127,21 @@ func handler(svc *service.Service, log *slog.Logger) events.Handler {
 			return nil
 		}
 	}
+}
+
+func decodeBookEvent(msg events.Message) (BookEvent, error) {
+	envelope, err := events.DecodeEvent(msg.Body)
+	if err != nil {
+		return BookEvent{}, fmt.Errorf("ai consumer: decode event envelope: %w", err)
+	}
+	if envelope.Type != msg.RoutingKey {
+		return BookEvent{}, fmt.Errorf("ai consumer: envelope type %q does not match routing key %q", envelope.Type, msg.RoutingKey)
+	}
+
+	var event BookEvent
+	if err := json.Unmarshal(envelope.Payload, &event); err != nil {
+		return BookEvent{}, fmt.Errorf("ai consumer: decode %s payload: %w", msg.RoutingKey, err)
+	}
+
+	return event, nil
 }

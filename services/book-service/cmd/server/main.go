@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,12 +22,16 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	pkgconfig "github.com/sapelyuk/smart-library/pkg/config"
+	pkgevents "github.com/sapelyuk/smart-library/pkg/events"
+	eventamqp "github.com/sapelyuk/smart-library/pkg/events/amqp"
 	"github.com/sapelyuk/smart-library/pkg/logger"
 	"github.com/sapelyuk/smart-library/pkg/migrate"
 	bookv1 "github.com/sapelyuk/smart-library/services/book-service/gen/go/book/v1"
+	"github.com/sapelyuk/smart-library/services/book-service/internal/events"
 	"github.com/sapelyuk/smart-library/services/book-service/internal/handler"
 	"github.com/sapelyuk/smart-library/services/book-service/internal/repository/postgres"
 	"github.com/sapelyuk/smart-library/services/book-service/internal/service"
+	"github.com/sapelyuk/smart-library/services/book-service/internal/tenant"
 	"github.com/sapelyuk/smart-library/services/book-service/migrations"
 )
 
@@ -109,10 +114,31 @@ func run(cfg appConfig, log *slog.Logger) error {
 	}
 
 	store := postgres.NewStore(db)
+	tenantResolver, err := tenant.NewResolverFromEnv()
+	if err != nil {
+		return err
+	}
+
+	var publisher events.Publisher
+	if strings.TrimSpace(os.Getenv(pkgevents.EnvURL)) == "" {
+		log.Warn("book event publishing disabled", "reason", pkgevents.EnvURL+" is not set")
+	} else {
+		transport, err := eventamqp.New(pkgevents.ConfigFromEnv(), log)
+		if err != nil {
+			return fmt.Errorf("build event transport: %w", err)
+		}
+		defer transport.Close()
+
+		publisher, err = pkgevents.NewEventPublisher(transport)
+		if err != nil {
+			return fmt.Errorf("build event publisher: %w", err)
+		}
+	}
 
 	log.Info("book-service listening", "addr", cfg.grpcAddr, "storage", "postgresql")
 
-	bookService := service.NewBookService(store, store)
+	bookService := service.NewBookService(store, store).
+		WithPublisher(publisher, tenantResolver.ID(), log)
 
 	grpcServer := grpc.NewServer()
 	bookv1.RegisterBookServiceServer(grpcServer, handler.NewGRPCServer(bookService, log))

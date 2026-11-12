@@ -65,6 +65,9 @@ go run ./cmd/server
 | `BOOK_SERVICE_DB_MAX_OPEN_CONNS` | `25` | максимум открытых соединений |
 | `BOOK_SERVICE_DB_MAX_IDLE_CONNS` | `5` | максимум простаивающих соединений |
 | `BOOK_SERVICE_DB_CONN_MAX_LIFETIME` | `30m` | время жизни соединения |
+| `BOOK_SERVICE_DEFAULT_TENANT_ID` | `00000000-0000-0000-0000-000000000001` | UUID tenant'а для событий Phase 1 |
+| `RABBITMQ_URL` | — | AMQP-адрес брокера; если не задан, публикация событий выключена |
+| `RABBITMQ_EXCHANGE` | `library.events` | topic exchange для доменных событий |
 
 Останов по `Ctrl+C` — graceful shutdown: сначала снимается health-статус
 `SERVING`, закрывается HTTP-сервер, затем `GracefulStop` с таймаутом.
@@ -129,6 +132,24 @@ curl -X POST http://localhost:8091/v1/copies/<copy_id>/return
 | `ListBookCopies` | экземпляры книги |
 | `BorrowBookCopy` | выдать первый доступный экземпляр (`AVAILABLE -> ON_LOAN`) |
 | `ReturnBookCopy` | принять экземпляр обратно (`ON_LOAN -> AVAILABLE`) |
+
+## События
+
+При заданном `RABBITMQ_URL` сервис публикует события через `pkg/events` в
+topic exchange `RABBITMQ_EXCHANGE` (по умолчанию `library.events`):
+
+| Событие | Когда публикуется | Основные поля payload |
+| --- | --- | --- |
+| `book.created` | после создания книги | `book_id`, `tenant_id`, `isbn`, `title`, `author`, `publisher`, `published_year` |
+| `book.updated` | после обновления книги | `book_id`, `tenant_id`, поля книги |
+| `book.deleted` | после удаления книги | `book_id`, `tenant_id` |
+| `book.viewed` | после успешного получения карточки | `book_id`, `tenant_id`, `occurred_at` |
+
+Публикация best effort: ошибка брокера логируется и не отменяет успешно
+выполненную операцию с каталогом. При незаданном `RABBITMQ_URL` сервис
+запускается без продюсера. Tenant Phase 1 задаётся через
+`BOOK_SERVICE_DEFAULT_TENANT_ID`; при отсутствии переменной используется
+постоянный UUID по умолчанию.
 
 ## Примеры (grpcurl)
 
@@ -215,4 +236,5 @@ go test ./...
 ## Ограничения текущей версии
 
 - Нет аутентификации: сервис рассчитан на внутренние вызовы через gateway.
-- Событий (RabbitMQ) пока нет — другие сервисы используют только gRPC.
+- Для Phase 1 используется один статический tenant; мультиарендность и RLS
+  находятся вне текущего скоупа.
