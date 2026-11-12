@@ -115,7 +115,7 @@ Smart Library AI является **первоклассным компонен�
 | Компонент                                             | Состояние                                              |
 |-------------------------------------------------------|--------------------------------------------------------|
 | Общий `pkg/` (logger, config, migrate, events)        | готово                                                 |
-| Book Service (proto, domain, service, repository, handler, server) | готово, хранилище **PostgreSQL** (PG 17 + `pgx/v5`) |
+| Book Service (proto, domain, service, repository, handler, server) | готово, хранилище **PostgreSQL** (PG 17 + `pgx/v5`), публикует `book.*` через `pkg/events` |
 | Book Service REST + Swagger UI (grpc-gateway, `:8091`) | готово                                                |
 | Book Service PostgreSQL repository                     | готово — `#9` (PG 17 + `pgx/v5`): миграции при старте, `FOR UPDATE SKIP LOCKED`, тесты против PG |
 | User Service (proto, domain, security, service, handler, server) | готово, хранилище **PostgreSQL** (argon2id + bearer-токены) |
@@ -126,7 +126,7 @@ Smart Library AI является **первоклассным компонен�
 | CI (GitHub Actions: build + test + race + coverage)   | готово — `#5` (PR #28); тесты book- и loan-service идут против сервис-контейнера `postgres:17`; изменения только в документации (`**.md`, `docs/**`) CI не запускают (`paths-ignore`) |
 | OpenAPI/Swagger из proto-аннотаций                    | готово: `grpc-gateway` генерирует REST-маршруты и `swagger.json` (embed в сервисы) |
 | Событийная шина (`pkg/events` + RabbitMQ-транспорт)   | готово — `#14`: брокер-агностичные порты `Publisher`/`Subscriber`, конверт события (schema version), `pkg/events/amqp` (topic exchange, publisher confirms, ручной ack, reconnect, TTL+DLX), env-конфиг `RABBITMQ_URL`/`RABBITMQ_EXCHANGE` |
-| Продюсеры/консьюмеры доменных событий                 | готово — `#14`: user-service публикует `user.registered`/`user.status.changed`/`user.session.created`; loan-service публикует `loan.issued`/`loan.returned` через `pkg/events` + AMQP; консьюмер-заготовка уведомлений (`internal/consumer`) до `#48` |
+| Продюсеры/консьюмеры доменных событий                 | book-service публикует `book.created`/`book.updated`/`book.deleted`/`book.viewed` (#89); user-service публикует `user.registered`/`user.status.changed`/`user.session.created`; loan-service публикует `loan.issued`/`loan.returned` через `pkg/events` + AMQP |
 | Обнаружение сервисов: выбор механизма                  | готово: ADR-0003 (Kubernetes DNS + Docker Compose DNS); реализация — `#8` |
 | AI Service: RAG-прототип (n8n + pgvector + Gemini)    | **работает end-to-end**: 20 книг проиндексировано, chat UI и webhook прошли smoke-тест; оценка качества: eval-набор (21 вопрос) + `scripts/eval-rag.ps1` + 53 offline-теста (`evals/` + `tests/`); артефакты в `services/ai-service/rag/` |
 | AI Service: Go-адаптер `ai.v1.AiService`              | **готово** — `#23`: gRPC/REST (`:8085`/`:8095`), клиент n8n-webhook (без генерации вне RAG), хранилище pgvector (`pgx/v5`), консьюмер `book.*` из RabbitMQ, Dockerfile + контейнер в `docker-compose.yml`; архитектура — ADR-0002 |
@@ -245,6 +245,8 @@ proto-пакеты), поэтому его Dockerfile копирует исхо�
 Учётные данные брокера берутся из `RABBITMQ_USER`/`RABBITMQ_PASS` (по умолчанию `guest`).
 Сервисы подключаются к брокеру по `RABBITMQ_URL` (по умолчанию `amqp://guest:guest@localhost:5672/`),
 доменные события идут в topic exchange `RABBITMQ_EXCHANGE` (по умолчанию `library.events`) — см. `pkg/events`.
+Book Service использует `BOOK_SERVICE_DEFAULT_TENANT_ID` для `tenant_id` в событиях
+(по умолчанию `00000000-0000-0000-0000-000000000001`); без `RABBITMQ_URL` он работает без продюсера.
 Векторная БД `ai-rag-db` (pgvector) настраивается через `AI_RAG_DB_USER`/`AI_RAG_DB_PASSWORD`/`AI_RAG_DB_NAME`
 (по умолчанию `bookrag`), схема применяется из `services/ai-service/rag/db/`. Быстрый старт RAG-прототипа —
 в `services/ai-service/rag/README.md`.

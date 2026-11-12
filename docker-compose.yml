@@ -174,6 +174,9 @@ services:
       # Inside the compose network the database is reachable by its service
       # name, not 127.0.0.1.
       BOOK_SERVICE_DB_DSN: host=book-db port=5432 user=${BOOK_SERVICE_DB_USER:-library} password=${BOOK_SERVICE_DB_PASSWORD:-library} dbname=${BOOK_SERVICE_DB_NAME:-library_books} sslmode=disable
+      BOOK_SERVICE_DEFAULT_TENANT_ID: ${BOOK_SERVICE_DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-library.events}
     restart: unless-stopped
 
   # Loan Service container. Manages the lending lifecycle (issue, return, renew)

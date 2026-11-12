@@ -6,10 +6,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/sapelyuk/smart-library/services/book-service/internal/domain"
+	"github.com/sapelyuk/smart-library/services/book-service/internal/events"
 	"github.com/sapelyuk/smart-library/services/book-service/internal/repository"
 )
 
@@ -36,13 +39,27 @@ type CreateBookInput struct {
 
 // BookService orchestrates repositories and enforces cross-entity rules.
 type BookService struct {
-	books  repository.BookRepository
-	copies repository.CopyRepository
+	books     repository.BookRepository
+	copies    repository.CopyRepository
+	publisher events.Publisher
+	tenantID  uuid.UUID
+	log       *slog.Logger
 }
 
 // NewBookService wires the service with its repositories.
 func NewBookService(books repository.BookRepository, copies repository.CopyRepository) *BookService {
-	return &BookService{books: books, copies: copies}
+	return &BookService{books: books, copies: copies, log: slog.Default()}
+}
+
+// WithPublisher configures best-effort event publishing for this service.
+func (s *BookService) WithPublisher(publisher events.Publisher, tenantID uuid.UUID, log *slog.Logger) *BookService {
+	s.publisher = publisher
+	s.tenantID = tenantID
+	if log != nil {
+		s.log = log
+	}
+
+	return s
 }
 
 // CreateBook registers a new edition in the catalog.
@@ -62,6 +79,8 @@ func (s *BookService) CreateBook(ctx context.Context, input CreateBookInput) (*d
 		return nil, fmt.Errorf("create book: %w", err)
 	}
 
+	s.publish(ctx, events.TypeBookCreated, events.BookCreated{BookPayload: s.bookPayload(book)})
+
 	return book, nil
 }
 
@@ -72,7 +91,18 @@ func (s *BookService) GetBook(ctx context.Context, id uuid.UUID) (*BookView, err
 		return nil, err
 	}
 
-	return s.view(ctx, book)
+	view, err := s.view(ctx, book)
+	if err != nil {
+		return nil, err
+	}
+
+	s.publish(ctx, events.TypeBookViewed, events.BookViewed{
+		TenantID:   s.tenantID.String(),
+		BookID:     book.ID.String(),
+		OccurredAt: time.Now().UTC(),
+	})
+
+	return view, nil
 }
 
 // ListBooks returns a page of the catalog and the total match count.
@@ -116,6 +146,8 @@ func (s *BookService) UpdateBook(ctx context.Context, id uuid.UUID, update domai
 		return nil, fmt.Errorf("update book: %w", err)
 	}
 
+	s.publish(ctx, events.TypeBookUpdated, events.BookUpdated{BookPayload: s.bookPayload(book)})
+
 	return s.view(ctx, book)
 }
 
@@ -133,6 +165,11 @@ func (s *BookService) DeleteBook(ctx context.Context, id uuid.UUID) error {
 	if err := s.books.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete book: %w", err)
 	}
+
+	s.publish(ctx, events.TypeBookDeleted, events.BookDeleted{
+		TenantID: s.tenantID.String(),
+		BookID:   id.String(),
+	})
 
 	return nil
 }
@@ -201,6 +238,29 @@ func (s *BookService) view(ctx context.Context, book *domain.Book) (*BookView, e
 	}
 
 	return &BookView{Book: book, Stats: stats}, nil
+}
+
+func (s *BookService) bookPayload(book *domain.Book) events.BookPayload {
+	return events.BookPayload{
+		TenantID:      s.tenantID.String(),
+		BookID:        book.ID.String(),
+		ISBN:          string(book.ISBN),
+		Title:         book.Title,
+		Author:        book.Author,
+		Publisher:     book.Publisher,
+		PublishedYear: book.PublishedYear,
+	}
+}
+
+func (s *BookService) publish(ctx context.Context, eventType string, payload any) {
+	if s.publisher == nil {
+		return
+	}
+
+	if err := s.publisher.Publish(ctx, eventType, payload); err != nil {
+		s.log.WarnContext(ctx, "cannot publish a domain event",
+			"event_type", eventType, "error", err)
+	}
 }
 
 func normalizeLimit(limit int) int {
